@@ -1,0 +1,2 @@
+# AutoChessGame
+AIのみで作成。
