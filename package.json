@@ -1,0 +1,11 @@
+{
+  "name": "auto-chess-arena",
+  "version": "0.1.0",
+  "private": true,
+  "description": "チェス盤の上で戦う 3v3 オートチェス（1人プレイ・3D）",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "dev": "node scripts/serve.js"
+  }
+}

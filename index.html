@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>AUTO CHESS ARENA — 3v3 オートバトル</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%99%9B%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./src/styles.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud">
+    <header class="topbar">
+      <div class="topbar__slot">
+        <div class="stat">
+          <span class="stat__label">ラウンド</span>
+          <span class="stat__value" id="statRound">1</span>
+        </div>
+        <div class="stat">
+          <span class="stat__label">ライフ</span>
+          <span class="stat__value stat__value--life" id="statLife">3</span>
+        </div>
+        <div class="stat">
+          <span class="stat__label">連勝</span>
+          <span class="stat__value" id="statStreak">0</span>
+        </div>
+      </div>
+
+      <div class="phase" id="phaseBadge">
+        <span class="phase__dot"></span>
+        <span class="phase__text" id="phaseText">準備フェーズ</span>
+      </div>
+
+      <div class="topbar__slot topbar__slot--right">
+        <button class="btn btn--ghost" id="btnSpeed" title="バトル速度">▶ 1.0x</button>
+        <button class="btn btn--ghost" id="btnHelp" title="遊びかた">?</button>
+      </div>
+    </header>
+
+    <!-- 準備フェーズのアクションバー -->
+    <footer class="actionbar" id="actionbar">
+      <div class="actionbar__hint" id="actionHint">
+        自軍のコマをドラッグして、手前3列に配置しよう
+      </div>
+      <button class="btn btn--primary" id="btnStart">バトル開始</button>
+    </footer>
+
+    <!-- 戦況ログ -->
+    <section class="log" id="logPanel" aria-live="polite">
+      <div class="log__title">戦況ログ</div>
+      <ul class="log__list" id="logList"></ul>
+    </section>
+
+    <!-- 選択中ユニットの詳細 -->
+    <aside class="inspector" id="inspector" hidden>
+      <div class="inspector__head">
+        <span class="inspector__glyph" id="inspGlyph">♙</span>
+        <div>
+          <div class="inspector__name" id="inspName">ポーン</div>
+          <div class="inspector__stars" id="inspStars">★</div>
+        </div>
+      </div>
+      <dl class="inspector__stats" id="inspStats"></dl>
+      <div class="inspector__skill">
+        <div class="inspector__skillName" id="inspSkillName"></div>
+        <p class="inspector__skillText" id="inspSkillText"></p>
+      </div>
+      <div class="inspector__move" id="inspMove"></div>
+    </aside>
+  </div>
+
+  <!-- ===== オーバーレイ ===== -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="overlay__panel" id="overlayPanel"></div>
+  </div>
+
+  <noscript>
+    <p style="color:#fff;padding:2rem;font:16px system-ui">
+      このゲームを遊ぶには JavaScript を有効にしてください。
+    </p>
+  </noscript>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
