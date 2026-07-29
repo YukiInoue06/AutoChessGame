@@ -37,10 +37,31 @@ const LATE_NAMES = [
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+/**
+ * localStorage はプライベートブラウジングや iframe 内で例外を投げることがあるので、
+ * 失敗してもゲームが止まらないように包んでおく。
+ */
+const storage = {
+  get(key, fallback) {
+    try {
+      return localStorage.getItem(key) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* 保存できない環境では諦める */
+    }
+  },
+};
+
 export class Game {
   constructor() {
     this.reset();
-    this.best = Number(localStorage.getItem("autochess.best") ?? 0);
+    this.best = Number(storage.get("autochess.best", 0));
   }
 
   reset() {
@@ -151,7 +172,7 @@ export class Game {
       this.round += 1;
       if (this.round - 1 > this.best) {
         this.best = this.round - 1;
-        localStorage.setItem("autochess.best", String(this.best));
+        storage.set("autochess.best", String(this.best));
       }
       return "win";
     }
