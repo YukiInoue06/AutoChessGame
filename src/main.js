@@ -448,12 +448,16 @@ async function boot() {
 /** タイトル背景に飾るコマたち */
 function showTitleDiorama() {
   const demo = [
-    { typeId: "king", team: "player", tile: { c: 3, r: 1 } },
-    { typeId: "queen", team: "player", tile: { c: 4, r: 2 } },
-    { typeId: "knight", team: "player", tile: { c: 2, r: 2 } },
-    { typeId: "rook", team: "enemy", tile: { c: 3, r: 6 } },
-    { typeId: "bishop", team: "enemy", tile: { c: 5, r: 5 } },
-    { typeId: "pawn", team: "enemy", tile: { c: 4, r: 5 } },
+    { typeId: "rook", team: "player", tile: { c: 2, r: 2 } },
+    { typeId: "knight", team: "player", tile: { c: 3, r: 2 } },
+    { typeId: "pawn", team: "player", tile: { c: 4, r: 2 } },
+    { typeId: "queen", team: "player", tile: { c: 3, r: 0 } },
+    { typeId: "king", team: "player", tile: { c: 4, r: 0 } },
+    { typeId: "knight", team: "enemy", tile: { c: 2, r: 5 } },
+    { typeId: "pawn", team: "enemy", tile: { c: 3, r: 5 } },
+    { typeId: "rook", team: "enemy", tile: { c: 4, r: 5 } },
+    { typeId: "bishop", team: "enemy", tile: { c: 3, r: 7 } },
+    { typeId: "queen", team: "enemy", tile: { c: 4, r: 7 } },
   ];
   for (const d of demo) {
     const u = createUnit(d);

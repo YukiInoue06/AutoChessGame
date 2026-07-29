@@ -14,17 +14,42 @@ export const Phase = {
   GAMEOVER: "gameover",
 };
 
-export const SQUAD_SIZE = 3;
+/** 1チームの人数 */
+export const SQUAD_SIZE = 5;
 export const START_LIFE = 3;
 
 /** 序盤6ラウンドの固定編成。以降は自動生成する */
 const ENEMY_SCRIPT = [
-  { comp: ["pawn", "pawn", "rook"], power: 0.82, name: "農民兵団" },
-  { comp: ["pawn", "knight", "bishop"], power: 0.95, name: "斥候隊" },
-  { comp: ["rook", "bishop", "knight"], power: 1.06, name: "城塞守備隊" },
-  { comp: ["knight", "queen", "pawn"], power: 1.16, name: "王家の騎兵" },
-  { comp: ["rook", "queen", "bishop"], power: 1.28, name: "魔導砲兵" },
-  { comp: ["king", "rook", "queen"], power: 1.4, name: "黒王の親衛隊" },
+  {
+    comp: ["pawn", "pawn", "pawn", "rook", "bishop"],
+    power: 0.78,
+    name: "農民兵団",
+  },
+  {
+    comp: ["pawn", "pawn", "knight", "knight", "bishop"],
+    power: 0.9,
+    name: "斥候隊",
+  },
+  {
+    comp: ["rook", "rook", "pawn", "bishop", "knight"],
+    power: 1.0,
+    name: "城塞守備隊",
+  },
+  {
+    comp: ["knight", "knight", "pawn", "queen", "king"],
+    power: 1.1,
+    name: "王家の騎兵",
+  },
+  {
+    comp: ["bishop", "bishop", "rook", "queen", "pawn"],
+    power: 1.2,
+    name: "魔導砲兵",
+  },
+  {
+    comp: ["king", "rook", "queen", "bishop", "knight"],
+    power: 1.32,
+    name: "黒王の親衛隊",
+  },
 ];
 
 const LATE_NAMES = [
@@ -77,7 +102,7 @@ export class Game {
     return this.life <= 0;
   }
 
-  /** 選んだ3体で編成を作り、初期配置を割り当てる */
+  /** 選んだコマで編成を作り、初期配置を割り当てる */
   setSquad(typeIds) {
     this.squad = typeIds.map((typeId) => ({ typeId, star: 1, tile: null }));
     this.autoPlaceSquad();
@@ -93,7 +118,8 @@ export class Game {
     for (const s of this.squad) {
       (UNIT_TYPES[s.typeId].range > 1 ? ranged : melee).push(s);
     }
-    const cols = [3, 4, 2, 5, 1, 6];
+    // 盤の中央から外側へ広がるように並べる
+    const cols = [3, 4, 2, 5, 1, 6, 0, 7];
 
     melee.forEach((s, i) => {
       s.tile = { c: cols[i % cols.length], r: PLAYER_ROWS[2] };
@@ -138,16 +164,18 @@ export class Game {
       ({ comp, power, name } = ENEMY_SCRIPT[idx]);
     } else {
       const extra = this.round - ENEMY_SCRIPT.length;
-      comp = [pick(UNIT_IDS), pick(UNIT_IDS), pick(UNIT_IDS)];
-      power = 1.4 + extra * 0.13;
+      comp = Array.from({ length: SQUAD_SIZE }, () => pick(UNIT_IDS));
+      power = 1.32 + extra * 0.09;
       name = pick(LATE_NAMES);
     }
 
-    // 後半は敵も★が上がる
-    const star = this.round >= 12 ? 3 : this.round >= 7 ? 2 : 1;
+    // 後半は敵も★が上がる。
+    // ★1つで1.7倍と跳ね上がるので、プレイヤーが全員を★アップし終える
+    // ペース（1勝で1体）に合わせて遅らせておく。
+    const star = this.round >= 20 ? 3 : this.round >= 11 ? 2 : 1;
+    if (star > 1) power /= Math.pow(1.35, star - 1); // ★の跳ね上がりを一部相殺
 
-    const rangedCols = [3, 4, 2];
-    const meleeCols = [3, 4, 2];
+    const cols = [3, 4, 2, 5, 1, 6, 0, 7];
     let rangedI = 0;
     let meleeI = 0;
 
@@ -155,8 +183,8 @@ export class Game {
       const isRanged = UNIT_TYPES[typeId].range > 1;
       // 敵の前方は -row なので row5 が最前線
       const tile = isRanged
-        ? { c: rangedCols[rangedI++ % 3], r: ENEMY_ROWS[2] }
-        : { c: meleeCols[meleeI++ % 3], r: ENEMY_ROWS[0] };
+        ? { c: cols[rangedI++ % cols.length], r: ENEMY_ROWS[2] }
+        : { c: cols[meleeI++ % cols.length], r: ENEMY_ROWS[0] };
       return { typeId, star, tile };
     });
 

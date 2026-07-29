@@ -283,7 +283,7 @@ html, body {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .overlay__panel {
-  width: min(760px, 92vw);
+  width: min(920px, 94vw);
   max-height: 88vh;
   overflow-y: auto;
   background: linear-gradient(160deg, #161d33, #0d1122);
@@ -316,9 +316,13 @@ html, body {
 /* ユニット選択カード */
 .roster {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
   gap: 12px;
   margin-top: 14px;
+}
+/* 編成選択の6枚は 3×2 に揃える（自動計算だと 5+1 になって落ち着かない） */
+@media (min-width: 700px) {
+  .roster--pick { grid-template-columns: repeat(3, 1fr); }
 }
 .card {
   position: relative;

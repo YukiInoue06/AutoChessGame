@@ -110,8 +110,11 @@ export class Effects {
     });
   }
 
-  /** 浮かび上がるダメージ数値 */
-  floatingText(pos, text, color, { scale = 0.62, rise = 1.0, life = 0.85 } = {}) {
+  /**
+   * 浮かび上がるダメージ数値。
+   * 乱戦だと数字が重なって読めなくなるので、出現位置は広めに散らす。
+   */
+  floatingText(pos, text, color, { scale = 0.62, rise = 1.1, life = 0.75 } = {}) {
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: textTexture(text, color),
@@ -121,8 +124,9 @@ export class Effects {
     );
     sprite.scale.set(scale * 2, scale, 1);
     sprite.position.copy(pos);
-    sprite.position.x += (Math.random() - 0.5) * 0.22;
-    sprite.position.z += (Math.random() - 0.5) * 0.22;
+    sprite.position.x += (Math.random() - 0.5) * 0.55;
+    sprite.position.y += (Math.random() - 0.5) * 0.3;
+    sprite.position.z += (Math.random() - 0.5) * 0.4;
     sprite.renderOrder = 20;
     this.layer.add(sprite);
 

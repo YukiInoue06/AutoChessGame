@@ -14,11 +14,15 @@ const MANA_PER_ATTACK = 10;
 const MANA_ON_HIT_CAP = 20;
 /** スキル詠唱で行動が止まる時間 */
 const CAST_LOCK = 0.35;
-/** サドンデス開始時刻と、その後の毎秒割合ダメージ */
+/**
+ * サドンデス開始時刻と、その後の毎秒割合ダメージ（最大HP比）。
+ * ★3どうしの終盤戦でも時間切れ判定に流れ込まないよう、強めに効かせる。
+ */
 const SUDDEN_DEATH_AT = 40;
-const SUDDEN_DEATH_DPS = 0.03;
+const SUDDEN_DEATH_DPS = 0.05;
+const SUDDEN_DEATH_RAMP = 10; // 何秒ごとに初期値ぶん増えるか
 /** 戦闘の強制終了時刻（保険） */
-const HARD_TIMEOUT = 75;
+const HARD_TIMEOUT = 70;
 
 let uidSeq = 1;
 
@@ -40,6 +44,7 @@ export function createUnit(spec) {
     maxHp: s.maxHp,
     hp: s.maxHp,
     shield: 0,
+    shieldUntil: 0,
     baseAtk: s.atk,
     atkMulPerm: 0, // 昇格などの永続バフ
     armor: s.armor,
@@ -62,6 +67,7 @@ export function createUnit(spec) {
     targetUid: null,
     tauntUid: null,
     tauntUntil: 0,
+    decayDebt: 0, // サドンデスの割合ダメージの端数
     buffs: [], // {stat:'atkMul'|'armor', value, until}
 
     // 集計用
@@ -137,9 +143,17 @@ export class BattleEngine {
         this.onEvent("announce", { text: "サドンデス!", tone: "danger" });
         this.onEvent("log", { html: "<em>サドンデス突入 — 全ユニットが消耗し始めた</em>" });
       }
-      const ratio = SUDDEN_DEATH_DPS * (1 + (this.time - SUDDEN_DEATH_AT) / 12);
+      const ratio =
+        SUDDEN_DEATH_DPS * (1 + (this.time - SUDDEN_DEATH_AT) / SUDDEN_DEATH_RAMP);
       for (const u of this.alive) {
-        this._applyDamage(u, u.maxHp * ratio * dt, DamageType.TRUE, null, { silent: true });
+        // 1フレームぶんの割合ダメージは 1 未満になることが多く、
+        // そのまま渡すと _applyDamage の丸めで潰れてしまう。端数を持ち越す。
+        u.decayDebt += u.maxHp * ratio * dt;
+        const tick = Math.floor(u.decayDebt);
+        if (tick >= 1) {
+          u.decayDebt -= tick;
+          this._applyDamage(u, tick, DamageType.TRUE, null, { silent: true });
+        }
       }
     }
 
@@ -155,9 +169,11 @@ export class BattleEngine {
 
   _expireBuffs() {
     for (const u of this.units) {
-      if (!u.buffs.length) continue;
-      u.buffs = u.buffs.filter((b) => b.until > this.time);
+      if (!u.alive) continue;
+      if (u.buffs.length) u.buffs = u.buffs.filter((b) => b.until > this.time);
       if (u.tauntUid && u.tauntUntil <= this.time) u.tauntUid = null;
+      // シールドは時間で消える（残しておくと膠着したまま落ちなくなる）
+      if (u.shield > 0 && u.shieldUntil <= this.time) u.shield = 0;
     }
   }
 
@@ -304,9 +320,12 @@ export class BattleEngine {
     this.onEvent("heal", { unit: u, amount: healed });
   }
 
-  _addShield(u, amount) {
-    u.shield += Math.round(amount);
-    this.onEvent("shield", { unit: u, amount: Math.round(amount) });
+  /** シールドは重ねずに上書き更新する（強い方を残す） */
+  _addShield(u, amount, duration) {
+    const value = Math.round(amount);
+    u.shield = Math.max(u.shield, value);
+    u.shieldUntil = this.time + duration;
+    this.onEvent("shield", { unit: u, amount: value });
   }
 
   _kill(u, source) {
@@ -434,7 +453,7 @@ const SKILLS = {
 
   /** 城塞: シールド + 防御バフ + 挑発 */
   rook(engine, u) {
-    engine._addShield(u, 380 * u.spellPower);
+    engine._addShield(u, 380 * u.spellPower, 8);
     u.buffs.push({ stat: "armor", value: 35, until: engine.time + 8 });
     engine.onEvent("buffPulse", { unit: u, color: 0x7ec8ff, text: "城塞" });
 

@@ -6,7 +6,7 @@
  */
 
 import { STAT_MAX, UNIT_TYPES, UNIT_IDS, buildStats } from "../core/units.js";
-import { Phase } from "../core/game.js";
+import { Phase, SQUAD_SIZE } from "../core/game.js";
 
 const $ = (id) => document.getElementById(id);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -184,14 +184,14 @@ export class Hud {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <h1 class="title">AUTO CHESS ARENA</h1>
-        <p class="subtitle">3 vs 3 ・ チェス盤オートバトル</p>
+        <p class="subtitle">${SQUAD_SIZE} vs ${SQUAD_SIZE} ・ チェス盤オートバトル</p>
         <p>
-          チェスのコマを3体えらんで盤に並べ、あとは見守るだけ。
+          チェスのコマを${SQUAD_SIZE}体えらんで盤に並べ、あとは見守るだけ。
           コマは<b>本物のチェスと同じ動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
         </p>
         <h3>ルール</h3>
         <ol class="helplist">
-          <li><b>編成</b> — 6種類のコマから3体を選ぶ</li>
+          <li><b>編成</b> — 6種類のコマから${SQUAD_SIZE}体を選ぶ</li>
           <li><b>準備</b> — 手前3列の好きなマスにドラッグで配置</li>
           <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち</li>
           <li><b>成長</b> — 勝つたびに1体を★アップ、負けるとライフが1減る</li>
@@ -243,8 +243,8 @@ export class Hud {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <h2>編成を組む</h2>
-        <p style="margin-top:4px">出撃させる3体を選ぼう。前衛・後衛・支援のバランスが勝敗を分ける。</p>
-        <div class="roster" id="rosterGrid"></div>
+        <p style="margin-top:4px">出撃させる${SQUAD_SIZE}体を選ぼう。前衛・後衛・支援のバランスが勝敗を分ける。</p>
+        <div class="roster roster--pick" id="rosterGrid"></div>
         <div class="overlay__actions">
           <span class="overlay__note" id="rosterNote"></span>
           <button class="btn" data-act="clear">選び直す</button>
@@ -266,7 +266,8 @@ export class Hud {
           const id = card.dataset.id;
           const i = selected.indexOf(id);
           card.dataset.selected = i >= 0 ? "true" : "false";
-          card.dataset.disabled = i < 0 && selected.length >= 3 ? "true" : "false";
+          card.dataset.disabled =
+            i < 0 && selected.length >= SQUAD_SIZE ? "true" : "false";
           let badge = card.querySelector(".card__order");
           if (i >= 0) {
             if (!badge) {
@@ -277,8 +278,8 @@ export class Hud {
             badge.textContent = i + 1;
           } else badge?.remove();
         }
-        note.textContent = `${selected.length} / 3 体を選択中`;
-        ok.disabled = selected.length !== 3;
+        note.textContent = `${selected.length} / ${SQUAD_SIZE} 体を選択中`;
+        ok.disabled = selected.length !== SQUAD_SIZE;
       };
 
       grid.addEventListener("click", (e) => {
@@ -287,7 +288,7 @@ export class Hud {
         const id = card.dataset.id;
         const i = selected.indexOf(id);
         if (i >= 0) selected.splice(i, 1);
-        else if (selected.length < 3) selected.push(id);
+        else if (selected.length < SQUAD_SIZE) selected.push(id);
         refresh();
       });
 
