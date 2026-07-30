@@ -89,6 +89,9 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .stat__value--life { color: var(--enemy); }
+.stat__value--gold { color: var(--gold); }
+.stat__value--cost { font-size: 16px; }
+.stat__value--cost[data-over="true"] { color: var(--enemy); }
 
 .phase {
   pointer-events: auto;
@@ -173,6 +176,168 @@ html, body {
   pointer-events: none;
 }
 .actionbar__hint { font-size: 13px; color: var(--muted); max-width: 46ch; }
+
+/* ---------- トースト（一瞬だけ出る通知） ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 110px;
+  transform: translate(-50%, 10px);
+  background: rgba(20, 26, 44, 0.95);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 30;
+  white-space: nowrap;
+}
+.toast[data-show="true"] { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- 兵舎 ---------- */
+.shop__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.shop__sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.shop__wallet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  background: rgba(245, 196, 81, 0.1);
+  border: 1px solid rgba(245, 196, 81, 0.3);
+  border-radius: 12px;
+  padding: 8px 16px;
+}
+.shop__gold {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.shop__goldLabel { font-size: 10px; letter-spacing: 0.14em; color: var(--muted); }
+.shop__empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.roster--owned .card { border-color: rgba(90, 210, 255, 0.28); }
+
+/* 操作ボタンを持つカードは、それ自体はクリック対象にしない */
+.card--static { cursor: default; }
+.card--static:hover { transform: none; background: rgba(255, 255, 255, 0.05); }
+.card__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.cardbtn {
+  flex: 1 1 0;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease;
+}
+.cardbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+.cardbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.cardbtn--gold {
+  color: var(--gold);
+  border-color: rgba(245, 196, 81, 0.4);
+  background: rgba(245, 196, 81, 0.12);
+}
+.cardbtn--gold:hover:not(:disabled) { background: rgba(245, 196, 81, 0.24); }
+.cardbtn--sell {
+  color: #ff9d9d;
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.1);
+}
+.cardbtn--sell:hover:not(:disabled) { background: rgba(255, 107, 107, 0.2); }
+
+/* コスト・売却額・配置のバッジ */
+.card__cost {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  background: rgba(245, 196, 81, 0.16);
+  border: 1px solid rgba(245, 196, 81, 0.45);
+  color: var(--gold);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.card__cost--sell {
+  background: rgba(255, 107, 107, 0.14);
+  border-color: rgba(255, 107, 107, 0.42);
+  color: #ff9d9d;
+}
+/* コストバッジの真下に置く（説明文と重ならないように） */
+.card__lock {
+  position: absolute;
+  inset: auto 0 0 0;
+  background: rgba(10, 13, 22, 0.86);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 12px 12px;
+  padding: 5px 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.card[data-locked="true"] { opacity: 0.55; }
+.shop__hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.card__place {
+  position: absolute;
+  top: 30px;
+  right: 9px;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+
+/* リザルトの収入表示 */
+.income {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  background: rgba(245, 196, 81, 0.08);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 14px;
+}
+.income__break { color: var(--muted); font-size: 12px; }
 
 /* ---------- ログ ---------- */
 .log {
@@ -432,6 +597,9 @@ kbd {
     padding: 12px;
   }
   .actionbar__hint { text-align: center; max-width: none; font-size: 12px; }
+  .toast { bottom: 150px; white-space: normal; max-width: 80vw; text-align: center; }
+  .shop__head { flex-direction: column; align-items: stretch; gap: 8px; }
+  .shop__wallet { flex-direction: row; align-items: center; gap: 8px; }
   .actionbar .btn--primary { width: 100%; }
   .stat { min-width: 50px; }
 }

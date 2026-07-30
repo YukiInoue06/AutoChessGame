@@ -13,6 +13,20 @@ export const SIZE = 8;
 export const PLAYER_ROWS = [0, 1, 2];
 export const ENEMY_ROWS = [5, 6, 7];
 
+/**
+ * ベンチ（控え）の行。盤の外側（手前）にぶら下がる仮想の1列で、
+ * ここに居るユニットは戦闘に参加しない。
+ * 盤内判定 inBounds は r >= 0 なので、経路探索がここへ入ってくることはない。
+ */
+export const BENCH_ROW = -1;
+export const BENCH_SIZE = SIZE;
+export const BENCH_TILES = Array.from({ length: BENCH_SIZE }, (_, c) => ({
+  c,
+  r: BENCH_ROW,
+}));
+
+export const isBenchTile = (tile) => tile?.r === BENCH_ROW;
+
 export const inBounds = (c, r) => c >= 0 && c < SIZE && r >= 0 && r < SIZE;
 export const key = (c, r) => r * SIZE + c;
 export const fromKey = (k) => ({ c: k % SIZE, r: Math.floor(k / SIZE) });
@@ -22,7 +36,8 @@ export const chebyshev = (a, b) =>
   Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
 
 /** マス名（a1 〜 h8）。ログ表示用 */
-export const tileName = (t) => "abcdefgh"[t.c] + (t.r + 1);
+export const tileName = (t) =>
+  isBenchTile(t) ? `控え${t.c + 1}` : "abcdefgh"[t.c] + (t.r + 1);
 
 /** 自陣（配置可能エリア）判定 */
 export const isDeployZone = (team, r) =>

@@ -4,7 +4,7 @@
  */
 
 import { UNIT_IDS, UNIT_TYPES } from "./units.js";
-import { ENEMY_ROWS, PLAYER_ROWS, SIZE } from "./board.js";
+import { BENCH_ROW, BENCH_SIZE, ENEMY_ROWS, PLAYER_ROWS, SIZE } from "./board.js";
 
 export const Phase = {
   SELECT: "select",
@@ -14,9 +14,31 @@ export const Phase = {
   GAMEOVER: "gameover",
 };
 
-/** 1チームの人数 */
+/** 盤に出せる最大人数 */
 export const SQUAD_SIZE = 5;
 export const START_LIFE = 3;
+
+/** 経済まわりの定数 */
+export const START_GOLD = 16;
+/** ラウンド終了時の基本収入 */
+const INCOME_BASE = 10;
+/** 勝利ボーナス */
+const INCOME_WIN = 4;
+/** 連勝ボーナスの上限 */
+const INCOME_STREAK_CAP = 5;
+
+/** 出撃コストの上限（ラウンドとともに増える） */
+export function deployLimitFor(round) {
+  return Math.min(22, 9 + Math.floor((round - 1) * 0.9));
+}
+
+/**
+ * 雇えるようになるラウンド。
+ * 序盤に高コストを買い込んでも出撃コスト上限のせいで2体しか出せず、
+ * 立て直せないまま負ける — という罠を防ぐための解禁段階。
+ */
+const UNLOCK_ROUND = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 6 };
+export const unlockRoundFor = (cost) => UNLOCK_ROUND[cost] ?? 1;
 
 /** 序盤6ラウンドの固定編成。以降は自動生成する */
 const ENEMY_SCRIPT = [
@@ -93,18 +115,231 @@ export class Game {
     this.round = 1;
     this.life = START_LIFE;
     this.streak = 0;
+    this.gold = START_GOLD;
     this.phase = Phase.SELECT;
-    /** @type {{typeId:string, star:number, tile:{c:number,r:number}}[]} */
-    this.squad = [];
+    this._nextId = 1;
+    /**
+     * 所持ユニット。盤の上とベンチの両方をここで持ち、
+     * onBoard で区別する。tile は盤上/ベンチどちらのマスも入る。
+     * @type {{id:number, typeId:string, star:number, onBoard:boolean, tile:{c:number,r:number}}[]}
+     */
+    this.roster = [];
+  }
+
+  // ------------------------------------------------------------------ 編成
+
+  /** 盤に出ているユニット（戦闘に参加する） */
+  get squad() {
+    return this.roster.filter((u) => u.onBoard);
+  }
+
+  /** ベンチのユニット */
+  get bench() {
+    return this.roster.filter((u) => !u.onBoard);
+  }
+
+  /** 現在の出撃コスト合計 */
+  get deployCost() {
+    return this.squad.reduce((n, u) => n + this.deployCostOf(u), 0);
+  }
+
+  get deployLimit() {
+    return deployLimitFor(this.round);
+  }
+
+  /** 雇用コスト（兵舎での値段） */
+  costOf(entry) {
+    return UNIT_TYPES[entry.typeId].cost;
+  }
+
+  /**
+   * 出撃コスト。★が上がると盤の枠をより多く食う。
+   * こうしないと「安いユニットを★3にして並べる」が一方的に有利になる。
+   */
+  deployCostOf(entry) {
+    return this.costOf(entry) + entry.star - 1;
+  }
+
+  /** ★アップに必要なゴールド（★3が上限） */
+  upgradeCostOf(entry) {
+    if (entry.star >= 3) return null;
+    return this.costOf(entry) * 6 * entry.star;
+  }
+
+  /**
+   * ゴールドで★アップする。
+   * ★が上がると出撃コストも1増えるので、盤に出したままだと
+   * 上限を超えてしまうことがある。その場合は断る
+   * （控えに戻せば強化できる）。
+   */
+  buyUpgrade(entry) {
+    const price = this.upgradeCostOf(entry);
+    if (price == null) return { ok: false, reason: "すでに★3です" };
+    if (this.gold < price) return { ok: false, reason: "ゴールドが足りません" };
+    if (entry.onBoard && this.deployCost + 1 > this.deployLimit) {
+      return {
+        ok: false,
+        reason: `★アップで出撃コストが上限（${this.deployLimit}）を超えます。控えに戻すか他を外してください`,
+      };
+    }
+    this.gold -= price;
+    entry.star += 1;
+    return { ok: true };
+  }
+
+  /** 売却価格（雇用ぶん＋★アップに払ったぶんの半分が戻る） */
+  refundOf(entry) {
+    let refund = this.costOf(entry);
+    for (let star = 1; star < entry.star; star++) {
+      refund += Math.round((this.costOf(entry) * 6 * star) / 2);
+    }
+    return refund;
+  }
+
+  /** そのユニットを盤に出せるか。理由も返す */
+  canField(entry) {
+    if (entry.onBoard) return { ok: true };
+    if (this.squad.length >= SQUAD_SIZE) {
+      return { ok: false, reason: `盤に出せるのは${SQUAD_SIZE}体までです` };
+    }
+    const cost = this.deployCostOf(entry);
+    if (this.deployCost + cost > this.deployLimit) {
+      return {
+        ok: false,
+        reason: `出撃コストが上限（${this.deployLimit}）を超えます`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /** そのユニットがこのラウンドで雇えるか */
+  isUnlocked(typeId) {
+    const t = UNIT_TYPES[typeId];
+    return !!t && this.round >= unlockRoundFor(t.cost);
+  }
+
+  /** 購入。成功したら追加されたエントリを返す */
+  buy(typeId) {
+    const t = UNIT_TYPES[typeId];
+    if (!t || t.hidden) return null;
+    if (!this.isUnlocked(typeId)) return null;
+    if (this.gold < t.cost) return null;
+    if (this.roster.length >= SQUAD_SIZE + BENCH_SIZE) return null;
+
+    this.gold -= t.cost;
+    const entry = {
+      id: this._nextId++,
+      typeId,
+      star: 1,
+      onBoard: false,
+      tile: null,
+    };
+    this.roster.push(entry);
+
+    // 空きがあれば盤へ、無ければベンチへ
+    if (this.canField(entry).ok && this._placeOnBoard(entry)) {
+      entry.onBoard = true;
+    } else {
+      this._placeOnBench(entry);
+    }
+    return entry;
+  }
+
+  /** 売却 */
+  sell(entry) {
+    const i = this.roster.indexOf(entry);
+    if (i < 0) return false;
+    this.gold += this.refundOf(entry);
+    this.roster.splice(i, 1);
+    return true;
+  }
+
+  /** 盤に出す */
+  field(entry, tile = null) {
+    const check = this.canField(entry);
+    if (!check.ok) return check;
+    entry.onBoard = true;
+    if (tile) entry.tile = { ...tile };
+    else if (!this._placeOnBoard(entry)) {
+      entry.onBoard = false;
+      return { ok: false, reason: "置ける空きマスがありません" };
+    }
+    return { ok: true };
+  }
+
+  /** ベンチに戻す */
+  unfield(entry, tile = null) {
+    entry.onBoard = false;
+    if (tile) entry.tile = { ...tile };
+    else this._placeOnBench(entry);
+    return { ok: true };
+  }
+
+  /** 盤の空きマスに置く（前衛は前列、射程持ちは後列） */
+  _placeOnBoard(entry) {
+    const used = new Set(
+      this.squad
+        .filter((u) => u !== entry && u.tile)
+        .map((u) => `${u.tile.c},${u.tile.r}`),
+    );
+    const cols = [3, 4, 2, 5, 1, 6, 0, 7];
+    const rows =
+      UNIT_TYPES[entry.typeId].range > 1
+        ? [PLAYER_ROWS[0], PLAYER_ROWS[1], PLAYER_ROWS[2]]
+        : [PLAYER_ROWS[2], PLAYER_ROWS[1], PLAYER_ROWS[0]];
+    for (const r of rows) {
+      for (const c of cols) {
+        if (!used.has(`${c},${r}`)) {
+          entry.tile = { c, r };
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * ベンチの空きスロットに置く。
+   * カメラは -Z 側から見ているので列は左右反転して映る。
+   * 画面の左から埋まって見えるように、列番号の大きい方から使う。
+   */
+  _placeOnBench(entry) {
+    const used = new Set(
+      this.bench.filter((u) => u !== entry && u.tile).map((u) => u.tile.c),
+    );
+    for (let c = BENCH_SIZE - 1; c >= 0; c--) {
+      if (!used.has(c)) {
+        entry.tile = { c, r: BENCH_ROW };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** ラウンド終了時の収入 */
+  grantIncome(win) {
+    const streakBonus = Math.min(this.streak, INCOME_STREAK_CAP);
+    const gain = INCOME_BASE + (win ? INCOME_WIN : 0) + streakBonus;
+    this.gold += gain;
+    return { gain, base: INCOME_BASE, win: win ? INCOME_WIN : 0, streak: streakBonus };
   }
 
   get isOver() {
     return this.life <= 0;
   }
 
-  /** 選んだコマで編成を作り、初期配置を割り当てる */
+  /**
+   * コストを無視して編成を作る。
+   * ゲーム本体では使わず、バランス検証スクリプトから利用する。
+   */
   setSquad(typeIds) {
-    this.squad = typeIds.map((typeId) => ({ typeId, star: 1, tile: null }));
+    this.roster = typeIds.map((typeId) => ({
+      id: this._nextId++,
+      typeId,
+      star: 1,
+      onBoard: true,
+      tile: null,
+    }));
     this.autoPlaceSquad();
   }
 
@@ -213,18 +448,16 @@ export class Game {
     return "lose";
   }
 
-  /** ★アップ可能なユニット（★3が上限） */
+  /** ★アップ可能なユニット（★3が上限）。ベンチも対象 */
   upgradableUnits() {
-    return this.squad.filter((s) => s.star < 3);
+    return this.roster.filter((u) => u.star < 3);
   }
 
-  upgrade(squadEntry) {
-    if (squadEntry.star < 3) squadEntry.star += 1;
+  upgrade(entry) {
+    if (entry && entry.star < 3) entry.star += 1;
   }
 
-  /** 編成の1体を別のコマに入れ替える */
-  replaceUnit(index, typeId) {
-    const prev = this.squad[index];
-    this.squad[index] = { typeId, star: prev.star, tile: prev.tile };
+  byId(id) {
+    return this.roster.find((u) => u.id === id) ?? null;
   }
 }

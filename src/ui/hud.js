@@ -12,7 +12,7 @@ import {
   JOB_IDS,
   buildStats,
 } from "../core/units.js";
-import { Phase, SQUAD_SIZE } from "../core/game.js";
+import { Phase, SQUAD_SIZE, unlockRoundFor } from "../core/game.js";
 
 const $ = (id) => document.getElementById(id);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -26,11 +26,15 @@ const PHASE_LABEL = {
 };
 
 export class Hud {
-  constructor({ onStart, onSpeedToggle, onHelp }) {
+  constructor({ onStart, onSpeedToggle, onHelp, onShop }) {
     this.el = {
       round: $("statRound"),
       life: $("statLife"),
       streak: $("statStreak"),
+      gold: $("statGold"),
+      cost: $("statCost"),
+      toast: $("toast"),
+      btnShop: $("btnShop"),
       phaseBadge: $("phaseBadge"),
       phaseText: $("phaseText"),
       actionbar: $("actionbar"),
@@ -55,6 +59,7 @@ export class Hud {
     this.el.btnStart.addEventListener("click", () => onStart());
     this.el.btnSpeed.addEventListener("click", () => onSpeedToggle());
     this.el.btnHelp.addEventListener("click", () => onHelp());
+    this.el.btnShop.addEventListener("click", () => onShop());
 
     this._announceEl = document.createElement("div");
     Object.assign(this._announceEl.style, {
@@ -76,10 +81,24 @@ export class Hud {
 
   // ------------------------------------------------------------ ヘッダー等
 
-  setStats({ round, life, streak }) {
-    this.el.round.textContent = round;
-    this.el.life.textContent = "♥".repeat(Math.max(0, life)) || "0";
-    this.el.streak.textContent = streak;
+  setStats(game) {
+    this.el.round.textContent = game.round;
+    this.el.life.textContent = "♥".repeat(Math.max(0, game.life)) || "0";
+    this.el.streak.textContent = game.streak;
+    this.el.gold.textContent = game.gold;
+    this.el.cost.textContent = `${game.deployCost}/${game.deployLimit}`;
+    this.el.cost.dataset.over = game.deployCost > game.deployLimit ? "true" : "false";
+  }
+
+  /** 短いメッセージを一瞬だけ出す（コスト上限に引っかかった時など） */
+  toast(text) {
+    const el = this.el.toast;
+    el.textContent = text;
+    el.dataset.show = "true";
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      el.dataset.show = "false";
+    }, 2200);
   }
 
   setPhase(phase) {
@@ -174,13 +193,31 @@ export class Hud {
 
   // ---------------------------------------------------------- オーバーレイ
 
+  /**
+   * オーバーレイを開く。
+   *
+   * パネルの DOM は使い回しているので、前の画面が張ったイベントリスナーが
+   * 残っていると次の画面のクリックを拾ってしまう（兵舎の売却処理が
+   * リザルト画面で走る、など）。開くたびに AbortController を作り替え、
+   * リスナーは必ず this._overlaySignal を渡して登録する。
+   */
   _openOverlay(html) {
+    this._overlayAbort?.abort();
+    this._overlayAbort = new AbortController();
+    this._overlaySignal = this._overlayAbort.signal;
     this.el.overlayPanel.innerHTML = html;
     this.el.overlay.hidden = false;
     return this.el.overlayPanel;
   }
 
+  /** オーバーレイ内でイベントを購読する（閉じると自動で外れる） */
+  _on(target, type, fn) {
+    target.addEventListener(type, fn, { signal: this._overlaySignal });
+  }
+
   closeOverlay() {
+    this._overlayAbort?.abort();
+    this._overlayAbort = null;
     this.el.overlay.hidden = true;
     this.el.overlayPanel.replaceChildren();
   }
@@ -197,17 +234,18 @@ export class Hud {
         </p>
         <h3>ルール</h3>
         <ol class="helplist">
-          <li><b>編成</b> — 20種類のユニットから${SQUAD_SIZE}体を選ぶ</li>
-          <li><b>準備</b> — 手前3列の好きなマスにドラッグで配置</li>
+          <li><b>兵舎</b> — ゴールドでユニットを雇う（コスト1〜5）</li>
+          <li><b>準備</b> — 手前3列にドラッグで配置。<b>出撃コストの上限</b>があるので全員は出せない</li>
+          <li><b>控え</b> — 盤の手前の列が控え。ドラッグで出し入れできる</li>
           <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち</li>
-          <li><b>成長</b> — 勝つたびに1体を★アップ、負けるとライフが1減る</li>
+          <li><b>成長</b> — 勝つたびに収入と★アップ、負けるとライフが1減る</li>
         </ol>
         <div class="overlay__actions">
           <span class="overlay__note">${best > 0 ? `自己ベスト: ラウンド ${best} 突破` : "初挑戦"}</span>
           <button class="btn btn--primary" data-act="start">ゲームスタート</button>
         </div>
       `);
-      p.querySelector('[data-act="start"]').addEventListener("click", () => {
+      this._on(p.querySelector('[data-act="start"]'), "click", () => {
         this.closeOverlay();
         resolve();
       });
@@ -221,9 +259,18 @@ export class Hud {
       <h3>操作</h3>
       <ul class="helplist">
         <li><b>ドラッグ</b> — 準備フェーズ中、自分のコマを手前3列に配置。味方どうしは入れ替えになります</li>
+        <li><b>控え列へドラッグ</b> — 盤のさらに手前の列が控え。出撃メンバーから外れます</li>
         <li><b>クリック</b> — コマの詳細（ステータス・スキル）を表示</li>
         <li><b>右ドラッグ / ホイール</b> — カメラの回転とズーム</li>
         <li><kbd>Space</kbd> — バトル開始 / 速度切替</li>
+      </ul>
+      <h3>ゴールドとコスト</h3>
+      <ul class="helplist">
+        <li>ユニットには<b>コスト1〜5</b>があり、兵舎でゴールドを払って雇います</li>
+        <li>盤に出せるのは<b>コスト合計が上限以内</b>かつ${SQUAD_SIZE}体まで。上限はラウンドが進むと増えます</li>
+        <li>雇ったユニットは<b>控え</b>に置いておけます（コスト上限には数えません）</li>
+        <li>売ると払ったぶんのゴールドが戻ります（★のぶんも含む）</li>
+        <li>収入はラウンドごとに基本10G＋勝利4G＋連勝ボーナス（最大5G）</li>
       </ul>
       <h3>戦闘のしくみ</h3>
       <ul class="helplist">
@@ -238,98 +285,188 @@ export class Hud {
         <button class="btn btn--primary" data-act="close">閉じる</button>
       </div>
     `);
-    p.querySelector('[data-act="close"]').addEventListener("click", () => this.closeOverlay());
+    this._on(p.querySelector('[data-act="close"]'), "click", () => this.closeOverlay());
   }
 
   /**
-   * 編成選択。チェスのコマとRPGジョブの2群から選ぶ。
-   * @param {string[]} initial すでに選んでいるコマ
-   * @returns {Promise<string[]>}
+   * 兵舎（購入・売却）。
+   * 所持ユニットと購入できるユニットを並べ、閉じるまで開いたまま操作できる。
+   *
+   * @param {object} game
+   * @param {{onChange?: () => void, first?: boolean}} opts
+   * @returns {Promise<void>} 閉じたら解決する
    */
-  showRosterSelect(initial = []) {
+  showShop(game, { onChange = () => {}, first = false } = {}) {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
-        <h2>編成を組む</h2>
-        <p style="margin-top:4px">
-          出撃させる${SQUAD_SIZE}体を選ぼう。前衛・後衛・支援のバランスが勝敗を分ける。
+        <div class="shop__head">
+          <div>
+            <h2>兵舎</h2>
+            <p class="shop__sub" id="shopSub"></p>
+          </div>
+          <div class="shop__wallet">
+            <span class="shop__gold" id="shopGold">0</span>
+            <span class="shop__goldLabel">ゴールド</span>
+          </div>
+        </div>
+
+        <h3>所持ユニット — ★アップ / 売却</h3>
+        <div class="roster roster--owned" id="shopOwned"></div>
+
+        <p class="shop__hint">
+          コストが高いユニットは進行に応じて解禁されます（コスト3はR2、4はR4、5はR6から）。
+          ★アップすると出撃コストも1増えます。
         </p>
-        <h3>チェスのコマ — 本家どおりの動き方をする</h3>
-        <div class="roster" id="gridChess"></div>
-        <h3>RPGジョブ — 役割に特化した動きとスキル</h3>
-        <div class="roster" id="gridJob"></div>
+        <h3>雇う — チェスのコマ</h3>
+        <div class="roster" id="shopChess"></div>
+        <h3>雇う — RPGジョブ</h3>
+        <div class="roster" id="shopJob"></div>
+
         <div class="overlay__actions">
-          <span class="overlay__note" id="rosterNote"></span>
-          <button class="btn" data-act="clear">選び直す</button>
-          <button class="btn btn--primary" data-act="ok" disabled>この編成で出撃</button>
+          <span class="overlay__note" id="shopNote"></span>
+          <button class="btn btn--primary" data-act="close">
+            ${first ? "盤に配置する" : "閉じる"}
+          </button>
         </div>
       `);
 
-      const note = p.querySelector("#rosterNote");
-      const ok = p.querySelector('[data-act="ok"]');
-      const selected = initial.filter((id) => UNIT_TYPES[id]).slice(0, SQUAD_SIZE);
+      const owned = p.querySelector("#shopOwned");
+      const chess = p.querySelector("#shopChess");
+      const job = p.querySelector("#shopJob");
+      const closeBtn = p.querySelector('[data-act="close"]');
 
-      const chessGrid = p.querySelector("#gridChess");
-      const jobGrid = p.querySelector("#gridJob");
-      for (const id of CHESS_IDS) chessGrid.appendChild(this._unitCard(id));
-      for (const id of JOB_IDS) jobGrid.appendChild(this._unitCard(id));
-      const cards = [...p.querySelectorAll(".card")];
+      for (const id of CHESS_IDS) chess.appendChild(this._unitCard(id, { shop: true }));
+      for (const id of JOB_IDS) job.appendChild(this._unitCard(id, { shop: true }));
+      const buyCards = [...chess.children, ...job.children];
 
-      const refresh = () => {
-        for (const card of cards) {
-          const i = selected.indexOf(card.dataset.id);
-          card.dataset.selected = i >= 0 ? "true" : "false";
-          card.dataset.disabled =
-            i < 0 && selected.length >= SQUAD_SIZE ? "true" : "false";
-          let badge = card.querySelector(".card__order");
-          if (i >= 0) {
-            if (!badge) {
-              badge = document.createElement("span");
-              badge.className = "card__order";
-              card.appendChild(badge);
-            }
-            badge.textContent = i + 1;
-          } else badge?.remove();
+      const render = () => {
+        // 所持ユニット
+        owned.replaceChildren();
+        if (!game.roster.length) {
+          const empty = document.createElement("p");
+          empty.className = "shop__empty";
+          empty.textContent = "まだ1体も居ません。下から雇いましょう。";
+          owned.appendChild(empty);
         }
-        note.textContent = `${selected.length} / ${SQUAD_SIZE} 体を選択中`;
-        ok.disabled = selected.length !== SQUAD_SIZE;
+        for (const entry of game.roster) {
+          const up = game.upgradeCostOf(entry);
+          // 出撃中は★アップで出撃コストが1増えるため、上限に当たると押せない
+          const overLimit =
+            entry.onBoard && game.deployCost + 1 > game.deployLimit;
+          const card = this._unitCard(entry.typeId, {
+            star: entry.star,
+            shop: true,
+            place: entry.onBoard ? `出撃 ${game.deployCostOf(entry)}枠` : "控え",
+            actions: [
+              {
+                act: "up",
+                label: up == null ? "★MAX" : `★${entry.star + 1} ${up}G`,
+                cls: "cardbtn--gold",
+                disabled: up == null || game.gold < up || overLimit,
+              },
+              { act: "sell", label: `売 ${game.refundOf(entry)}G`, cls: "cardbtn--sell" },
+            ],
+          });
+          card.dataset.entryId = String(entry.id);
+          owned.appendChild(card);
+        }
+
+        // 購入カードの状態（未解禁・ゴールド不足・所持上限）
+        const full = game.roster.length >= SQUAD_SIZE + 8;
+        for (const card of buyCards) {
+          const id = card.dataset.id;
+          const cost = UNIT_TYPES[id].cost;
+          const locked = !game.isUnlocked(id);
+          card.dataset.disabled =
+            locked || game.gold < cost || full ? "true" : "false";
+          card.dataset.locked = locked ? "true" : "false";
+          let tag = card.querySelector(".card__lock");
+          if (locked) {
+            if (!tag) {
+              tag = document.createElement("span");
+              tag.className = "card__lock";
+              card.appendChild(tag);
+            }
+            tag.textContent = `R${unlockRoundFor(cost)} 解禁`;
+          } else tag?.remove();
+        }
+
+        p.querySelector("#shopGold").textContent = game.gold;
+        p.querySelector("#shopSub").innerHTML =
+          `ラウンド ${game.round} ／ 出撃コスト上限 <b>${game.deployLimit}</b>` +
+          `（いまの合計 ${game.deployCost}）`;
+        p.querySelector("#shopNote").textContent = full
+          ? "所持数がいっぱいです（盤5＋控え8）"
+          : `所持 ${game.roster.length} 体 — 出撃 ${game.squad.length} / 控え ${game.bench.length}`;
+        closeBtn.disabled = first && game.squad.length === 0;
+        onChange();
       };
 
-      // カードをクリックしたときにフォーカス移動でパネルが勝手にスクロールするのを防ぐ
-      // （キーボードの Tab 移動は残る）
-      p.addEventListener("mousedown", (e) => {
+      // フォーカス移動でパネルがスクロールするのを防ぐ
+      this._on(p, "mousedown", (e) => {
         if (e.target.closest(".card")) e.preventDefault();
       });
 
-      p.addEventListener("click", (e) => {
+      this._on(p, "click", (e) => {
+        // 所持ユニットの ★アップ / 売却
+        const btn = e.target.closest(".cardbtn");
+        if (btn) {
+          const card = btn.closest(".card");
+          const entry = game.byId(Number(card.dataset.entryId));
+          if (!entry) return;
+          const name = UNIT_TYPES[entry.typeId].name;
+          if (btn.dataset.act === "up") {
+            const price = game.upgradeCostOf(entry);
+            const res = game.buyUpgrade(entry);
+            this.toast(
+              res.ok ? `${name} を ★${entry.star} に強化（-${price}G）` : res.reason,
+            );
+          } else {
+            this.toast(`${name} を ${game.refundOf(entry)}G で売却`);
+            game.sell(entry);
+          }
+          render();
+          return;
+        }
+
+        // 雇用
         const card = e.target.closest(".card");
-        if (!card) return;
+        if (!card || card.classList.contains("card--static")) return;
+        if (card.dataset.disabled === "true") return;
         const id = card.dataset.id;
-        const i = selected.indexOf(id);
-        if (i >= 0) selected.splice(i, 1);
-        else if (selected.length < SQUAD_SIZE) selected.push(id);
-        refresh();
+        if (game.buy(id)) this.toast(`${UNIT_TYPES[id].name} を雇った`);
+        else this.toast("ゴールドか空きが足りません");
+        render();
       });
 
-      p.querySelector('[data-act="clear"]').addEventListener("click", () => {
-        selected.length = 0;
-        refresh();
-      });
-      ok.addEventListener("click", () => {
+      this._on(closeBtn, "click", () => {
         this.closeOverlay();
-        resolve([...selected]);
+        resolve();
       });
 
-      refresh();
+      render();
     });
   }
 
-  _unitCard(typeId, { star = 1, badge = "" } = {}) {
+  /**
+   * ユニットカード。
+   * actions を渡すと、クリックできるボタンを内側に持つ静的カードになる
+   * （ボタンの入れ子を避けるため、その場合は div で作る）。
+   */
+  _unitCard(
+    typeId,
+    { star = 1, badge = "", shop = false, place = null, actions = null } = {},
+  ) {
     const t = UNIT_TYPES[typeId];
     const s = buildStats(typeId, { star });
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "card";
+    const card = document.createElement(actions ? "div" : "button");
+    if (!actions) card.type = "button";
+    card.className = actions ? "card card--static" : "card";
     card.dataset.id = typeId;
+    if (shop) {
+      badge += `<span class="card__cost">${t.cost}G</span>`;
+      if (place) badge += `<span class="card__place">${place}</span>`;
+    }
     card.title = `${t.name}（${t.role}）\n移動: ${t.moveText}\n${t.skill.name}: ${t.skill.text}`;
     card.innerHTML = `
       <div class="card__glyph">${t.glyph}</div>
@@ -342,74 +479,108 @@ export class Hud {
       </div>
       <div class="card__skill"><b>${t.skill.name}</b>${t.skill.text}</div>
       ${badge}
+      ${
+        actions
+          ? `<div class="card__actions">${actions
+              .map(
+                (a) =>
+                  `<button type="button" class="cardbtn ${a.cls ?? ""}" data-act="${a.act}"` +
+                  `${a.disabled ? " disabled" : ""}>${a.label}</button>`,
+              )
+              .join("")}</div>`
+          : ""
+      }
     `;
     return card;
   }
 
   /**
-   * ラウンド結果 + 報酬（★アップ / 編成変更）。
-   * @returns {Promise<{action:'continue'|'reroster'}>}
+   * ラウンド結果 + 報酬（★アップ）。
+   * ★アップの対象は控えも含めた所持ユニット全体。
+   *
+   * @returns {Promise<{action:'continue'|'shop', upgradeId:number|null}>}
    */
-  showRoundResult({ win, round, squad, enemyName, mvp, life }) {
+  showRoundResult({ win, round, roster, enemyName, mvp, life, income, gold }) {
     return new Promise((resolve) => {
-      const upgradable = squad.filter((s) => s.star < 3);
+      const upgradable = roster.filter((u) => u.star < 3);
       const p = this._openOverlay(`
         <div class="result-tag ${win ? "result-tag--win" : "result-tag--lose"}">
           ${win ? "VICTORY" : "DEFEAT"}
         </div>
         <h2>ラウンド ${round} ${win ? "突破" : "敗北"}</h2>
         <p style="margin-top:2px">
-          ${win
-            ? `<b>${enemyName}</b> を退けた。${mvp ? `MVP は <b style="color:#5ad2ff">${mvp.name}</b>（${mvp.damage} ダメージ）。` : ""}`
-            : `<b>${enemyName}</b> に敗れた。残りライフ <b style="color:#ff6b6b">${"♥".repeat(life)}</b>`}
+          ${
+            win
+              ? `<b>${enemyName}</b> を退けた。${mvp ? `MVP は <b style="color:#5ad2ff">${mvp.name}</b>（${mvp.damage} ダメージ）。` : ""}`
+              : `<b>${enemyName}</b> に敗れた。残りライフ <b style="color:#ff6b6b">${"♥".repeat(life)}</b>`
+          }
         </p>
-        <h3>${win ? "報酬 — 1体を★アップ" : "編成を立て直そう"}</h3>
-        <div class="roster" id="rewardGrid"></div>
+        <p class="income">
+          収入 <b>+${income.gain}G</b>
+          <span class="income__break">
+            （基本 ${income.base}${income.win ? ` ／ 勝利 +${income.win}` : ""}${income.streak ? ` ／ 連勝 +${income.streak}` : ""}）
+          </span>
+          → 所持 <b style="color:#f5c451">${gold}G</b>
+        </p>
+
+        <h3>報酬 — 1体を★アップ（控えも選べます）</h3>
+        <div class="roster roster--owned" id="rewardGrid"></div>
         <div class="overlay__actions">
           <span class="overlay__note" id="rewardNote">${
-            win
-              ? upgradable.length
-                ? "★が上がるとステータスが1.7倍になる"
-                : "全員が★3。これ以上は上げられない"
-              : "同じ編成で再挑戦するか、組み直すか選ぼう"
+            upgradable.length
+              ? "★が上がるとステータスが1.7倍になる"
+              : "全員が★3。これ以上は上げられない"
           }</span>
-          <button class="btn" data-act="reroster">編成を組み直す</button>
-          <button class="btn btn--primary" data-act="next" ${win && upgradable.length ? "disabled" : ""}>
-            ${win ? "次のラウンドへ" : "再挑戦"}
+          <button class="btn btn--gold" data-act="shop">兵舎へ</button>
+          <button class="btn btn--primary" data-act="next" ${upgradable.length ? "disabled" : ""}>
+            次へ
           </button>
         </div>
       `);
 
       const grid = p.querySelector("#rewardGrid");
       const next = p.querySelector('[data-act="next"]');
-      let chosen = null;
+      let chosenId = null;
 
-      squad.forEach((s, i) => {
-        const card = this._unitCard(s.typeId, { star: s.star });
-        card.dataset.index = String(i);
-        if (win && s.star >= 3) card.dataset.disabled = "true";
+      for (const entry of roster) {
+        const card = this._unitCard(entry.typeId, {
+          star: entry.star,
+          place: entry.onBoard ? "出撃" : "控え",
+          shop: true,
+        });
+        card.dataset.entryId = String(entry.id);
+        if (entry.star >= 3) card.dataset.disabled = "true";
         grid.appendChild(card);
-      });
+      }
 
-      if (win && upgradable.length) {
-        grid.addEventListener("click", (e) => {
+      if (upgradable.length) {
+        this._on(p, "mousedown", (e) => {
+          if (e.target.closest(".card")) e.preventDefault();
+        });
+        this._on(grid, "click", (e) => {
           const card = e.target.closest(".card");
           if (!card || card.dataset.disabled === "true") return;
-          chosen = Number(card.dataset.index);
-          for (const c of grid.children) c.dataset.selected = c === card ? "true" : "false";
+          chosenId = Number(card.dataset.entryId);
+          for (const c of grid.children) {
+            c.dataset.selected = c === card ? "true" : "false";
+          }
           next.disabled = false;
         });
       } else {
         for (const c of grid.children) c.style.pointerEvents = "none";
       }
 
-      next.addEventListener("click", () => {
+      const finish = (action) => {
         this.closeOverlay();
-        resolve({ action: "continue", upgradeIndex: chosen });
-      });
-      p.querySelector('[data-act="reroster"]').addEventListener("click", () => {
-        this.closeOverlay();
-        resolve({ action: "reroster", upgradeIndex: chosen });
+        resolve({ action, upgradeId: chosenId });
+      };
+      this._on(next, "click", () => finish("continue"));
+      this._on(p.querySelector('[data-act="shop"]'), "click", () => {
+        if (upgradable.length && chosenId === null) {
+          this.toast("先に★アップする1体を選んでください");
+          return;
+        }
+        finish("shop");
       });
     });
   }
@@ -425,7 +596,7 @@ export class Hud {
           <button class="btn btn--gold" data-act="retry">最初から挑戦する</button>
         </div>
       `);
-      p.querySelector('[data-act="retry"]').addEventListener("click", () => {
+      this._on(p.querySelector('[data-act="retry"]'), "click", () => {
         this.closeOverlay();
         resolve();
       });

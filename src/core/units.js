@@ -80,6 +80,7 @@ export const UNIT_TYPES = {
   pawn: {
     id: "pawn",
     family: "chess",
+    cost: 1,
     name: "ポーン",
     role: "前衛 / ファイター",
     glyph: "♙",
@@ -116,6 +117,7 @@ export const UNIT_TYPES = {
   knight: {
     id: "knight",
     family: "chess",
+    cost: 3,
     name: "ナイト",
     role: "強襲 / アサシン",
     glyph: "♘",
@@ -141,6 +143,7 @@ export const UNIT_TYPES = {
   bishop: {
     id: "bishop",
     family: "chess",
+    cost: 2,
     name: "ビショップ",
     role: "後衛 / メイジ",
     glyph: "♗",
@@ -166,6 +169,7 @@ export const UNIT_TYPES = {
   rook: {
     id: "rook",
     family: "chess",
+    cost: 3,
     name: "ルーク",
     role: "壁 / タンク",
     glyph: "♖",
@@ -191,6 +195,7 @@ export const UNIT_TYPES = {
   queen: {
     id: "queen",
     family: "chess",
+    cost: 5,
     name: "クイーン",
     role: "主砲 / キャリー",
     glyph: "♕",
@@ -216,6 +221,7 @@ export const UNIT_TYPES = {
   king: {
     id: "king",
     family: "chess",
+    cost: 4,
     name: "キング",
     role: "支援 / バッファー",
     glyph: "♔",
@@ -245,6 +251,7 @@ export const UNIT_TYPES = {
   warrior: {
     id: "warrior",
     family: "job",
+    cost: 2,
     name: "戦士",
     role: "前衛 / ファイター",
     glyph: "⚔️",
@@ -270,6 +277,7 @@ export const UNIT_TYPES = {
   paladin: {
     id: "paladin",
     family: "job",
+    cost: 5,
     name: "聖騎士",
     role: "壁 / プロテクター",
     glyph: "🛡️",
@@ -295,6 +303,7 @@ export const UNIT_TYPES = {
   archer: {
     id: "archer",
     family: "job",
+    cost: 2,
     name: "弓兵",
     role: "後衛 / アタッカー",
     glyph: "🏹",
@@ -320,6 +329,7 @@ export const UNIT_TYPES = {
   cleric: {
     id: "cleric",
     family: "job",
+    cost: 3,
     name: "僧侶",
     role: "支援 / ヒーラー",
     glyph: "✚",
@@ -345,6 +355,7 @@ export const UNIT_TYPES = {
   wizard: {
     id: "wizard",
     family: "job",
+    cost: 3,
     name: "魔術師",
     role: "後衛 / 範囲メイジ",
     glyph: "🔥",
@@ -370,6 +381,7 @@ export const UNIT_TYPES = {
   thief: {
     id: "thief",
     family: "job",
+    cost: 2,
     name: "盗賊",
     role: "遊撃 / 高速",
     glyph: "🗡️",
@@ -395,6 +407,7 @@ export const UNIT_TYPES = {
   dragoon: {
     id: "dragoon",
     family: "job",
+    cost: 4,
     name: "竜騎士",
     role: "強襲 / ジャンパー",
     glyph: "🐲",
@@ -420,6 +433,7 @@ export const UNIT_TYPES = {
   ninja: {
     id: "ninja",
     family: "job",
+    cost: 3,
     name: "忍者",
     role: "暗殺 / 妨害",
     glyph: "🥷",
@@ -445,6 +459,7 @@ export const UNIT_TYPES = {
   berserker: {
     id: "berserker",
     family: "job",
+    cost: 4,
     name: "狂戦士",
     role: "前衛 / 火力",
     glyph: "🪓",
@@ -472,6 +487,7 @@ export const UNIT_TYPES = {
   sniper: {
     id: "sniper",
     family: "job",
+    cost: 4,
     name: "狙撃手",
     role: "後衛 / 超長射程",
     glyph: "🎯",
@@ -497,6 +513,7 @@ export const UNIT_TYPES = {
   summoner: {
     id: "summoner",
     family: "job",
+    cost: 4,
     name: "召喚士",
     role: "後衛 / 召喚",
     glyph: "👻",
@@ -522,6 +539,7 @@ export const UNIT_TYPES = {
   bard: {
     id: "bard",
     family: "job",
+    cost: 3,
     name: "吟遊詩人",
     role: "支援 / バッファー",
     glyph: "🎵",
@@ -549,6 +567,7 @@ export const UNIT_TYPES = {
   icemage: {
     id: "icemage",
     family: "job",
+    cost: 3,
     name: "氷術師",
     role: "後衛 / 制圧",
     glyph: "❄️",
@@ -574,6 +593,7 @@ export const UNIT_TYPES = {
   guardian: {
     id: "guardian",
     family: "job",
+    cost: 4,
     name: "重装兵",
     role: "壁 / 長柄",
     glyph: "🔱",
@@ -600,6 +620,7 @@ export const UNIT_TYPES = {
   golem: {
     id: "golem",
     family: "job",
+    cost: 0,
     hidden: true,
     name: "ゴーレム",
     role: "召喚 / 壁",
@@ -630,6 +651,9 @@ export const JOB_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "job");
 
 /** ★が1つ上がるごとの倍率 */
 export const STAR_SCALE = 1.7;
+
+/** コストの上限（表示用） */
+export const MAX_COST = 5;
 
 /** 表示バー用の正規化基準（カードのゲージ） */
 export const STAT_MAX = { hp: 1100, atk: 92, range: 5 };

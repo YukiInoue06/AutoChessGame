@@ -60,8 +60,9 @@ export class UnitView {
   /**
    * @param {object} unit battle.js のユニット実体
    * @param {THREE.Group} layer
+   * @param {{animateSpawn?: boolean}} opts
    */
-  constructor(unit, layer) {
+  constructor(unit, layer, { animateSpawn = true } = {}) {
     this.unit = unit;
     this.layer = layer;
     this.dead = false;
@@ -111,10 +112,23 @@ export class UnitView {
     this._lastBarKey = "";
     this.selected = false;
     this.hovered = false;
+    /** 控え（ベンチ）にいるか。小さく・くすんだ表示にする */
+    this.benched = false;
+    this.scaleTarget = 1;
 
-    // 登場演出
-    this.group.scale.setScalar(0.01);
-    this.anim.spawn = 0.001;
+    if (animateSpawn) {
+      this.group.scale.setScalar(0.01);
+      this.anim.spawn = 0.001;
+    } else {
+      this.anim.spawn = null;
+      this.group.scale.setScalar(1);
+    }
+  }
+
+  /** 控えに置かれているかを設定する */
+  setBenched(on) {
+    this.benched = on;
+    this.scaleTarget = on ? 0.78 : 1;
   }
 
   // ------------------------------------------------------------------ バー
@@ -145,6 +159,7 @@ export class UnitView {
 
   drawBar() {
     const u = this.unit;
+    this.barSprite.visible = !this.benched && !this.dead;
     const hpR = Math.max(0, u.hp / u.maxHp);
     const shR = Math.min(1, u.shield / u.maxHp);
     const mpR = u.manaMax > 0 ? Math.min(1, u.mana / u.manaMax) : 0;
@@ -296,11 +311,14 @@ export class UnitView {
     // 登場
     if (a.spawn !== null && a.spawn < 1 && !this.dead) {
       a.spawn = Math.min(1, a.spawn + dt / 0.35);
-      const s = easeOutCubic(a.spawn);
-      this.group.scale.setScalar(s * (1 + 0.12 * (1 - s)));
-      if (a.spawn >= 1) {
-        a.spawn = null;
-        this.group.scale.setScalar(1);
+      const k = easeOutCubic(a.spawn);
+      this.group.scale.setScalar(this.scaleTarget * k * (1 + 0.12 * (1 - k)));
+      if (a.spawn >= 1) a.spawn = null;
+    } else if (a.spawn === null && !this.dead) {
+      // 出撃/控えの切り替えでなめらかに大きさを変える
+      const cur = this.group.scale.x;
+      if (Math.abs(cur - this.scaleTarget) > 0.002) {
+        this.group.scale.setScalar(cur + (this.scaleTarget - cur) * Math.min(1, dt * 10));
       }
     }
 
@@ -376,13 +394,19 @@ export class UnitView {
     }
 
     // リング（選択・ホバー・マナ満タンで強調）
-    const manaFull = this.unit.mana >= this.unit.manaMax;
-    let ringOpacity = 0.45;
+    const manaFull = !this.benched && this.unit.mana >= this.unit.manaMax;
+    let ringOpacity = this.benched ? 0.22 : 0.45;
     if (manaFull) ringOpacity = 0.55 + Math.sin(elapsed * 8) * 0.35;
     if (this.hovered) ringOpacity = Math.max(ringOpacity, 0.8);
     if (this.selected) ringOpacity = 0.7 + Math.sin(elapsed * 6) * 0.3;
     this.ring.material.opacity = ringOpacity;
-    this.ring.material.color.copy(manaFull ? new THREE.Color(0xffe27a) : this.teamColor);
+    this.ring.material.color.copy(
+      manaFull
+        ? new THREE.Color(0xffe27a)
+        : this.benched
+          ? new THREE.Color(0x8fa0bd)
+          : this.teamColor,
+    );
     const ringScale = this.selected ? 1.12 + Math.sin(elapsed * 6) * 0.05 : 1;
     this.ring.scale.setScalar(ringScale);
 

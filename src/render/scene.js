@@ -4,7 +4,13 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { SIZE, isLightTile, allTiles } from "../core/board.js";
+import {
+  SIZE,
+  isLightTile,
+  allTiles,
+  BENCH_TILES,
+  isBenchTile,
+} from "../core/board.js";
 
 export const TILE = 1;
 export const BOARD_HALF = (SIZE * TILE) / 2;
@@ -18,13 +24,14 @@ export const COLORS = {
   bg: 0x0a0d16,
 };
 
-/** 盤上の座標 -> ワールド座標 */
+/** ベンチ列の Z 位置（盤の手前に少し離して置く） */
+export const BENCH_Z = -(SIZE / 2) * TILE - 1.15;
+
+/** 盤上（またはベンチ）の座標 -> ワールド座標 */
 export function worldOf(tile, y = 0) {
-  return new THREE.Vector3(
-    (tile.c - (SIZE - 1) / 2) * TILE,
-    y,
-    (tile.r - (SIZE - 1) / 2) * TILE,
-  );
+  const x = (tile.c - (SIZE - 1) / 2) * TILE;
+  if (isBenchTile(tile)) return new THREE.Vector3(x, y, BENCH_Z);
+  return new THREE.Vector3(x, y, (tile.r - (SIZE - 1) / 2) * TILE);
 }
 
 function makeBackgroundTexture() {
@@ -97,6 +104,30 @@ function buildBoard() {
     tileMeshes.push(mesh);
   }
 
+  // --- ベンチ列（控え） ---
+  const benchMat = new THREE.MeshStandardMaterial({
+    color: 0x2c3244,
+    roughness: 0.65,
+    metalness: 0.2,
+  });
+  for (const t of BENCH_TILES) {
+    const mesh = new THREE.Mesh(tileGeo, benchMat);
+    const p = worldOf(t);
+    mesh.position.set(p.x, -0.08, p.z);
+    mesh.receiveShadow = true;
+    mesh.userData.tile = t;
+    board.add(mesh);
+    tileMeshes.push(mesh);
+  }
+  // ベンチの土台
+  const benchFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(SIZE * TILE + 0.5, 0.26, TILE + 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x151a29, roughness: 0.5, metalness: 0.35 }),
+  );
+  benchFrame.position.set(0, -0.15, BENCH_Z);
+  benchFrame.receiveShadow = true;
+  board.add(benchFrame);
+
   // 外枠
   const frameMat = new THREE.MeshStandardMaterial({
     color: COLORS.frame,
@@ -130,7 +161,7 @@ function buildBoard() {
 function buildHighlights(parent) {
   const geo = new THREE.PlaneGeometry(TILE * 0.9, TILE * 0.9);
   const meshes = new Map();
-  for (const t of allTiles()) {
+  for (const t of [...allTiles(), ...BENCH_TILES]) {
     const mat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -166,10 +197,11 @@ export function createStage(canvas) {
   scene.fog = new THREE.Fog(COLORS.bg, 22, 44);
 
   const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 120);
-  camera.position.set(0, 9.2, -10.2);
+  camera.position.set(0, 9.6, -11.0);
 
   const controls = new OrbitControls(camera, canvas);
-  controls.target.set(0, 0.2, 0);
+  // 盤とベンチ列をまとめた中心を見る
+  controls.target.set(0, 0.2, BENCH_Z / 2 + 0.3);
   controls.enableDamping = true;
   controls.dampingFactor = 0.075;
   controls.enablePan = false;
@@ -268,6 +300,20 @@ export function createStage(canvas) {
     }
   }
 
+  /** 色ごとにまとめてハイライトする（配置可能エリアと控え列で色を分ける） */
+  function highlightGroups(groups) {
+    clearHighlights();
+    for (const { tiles, color, opacity = 0.32 } of groups) {
+      for (const t of tiles) {
+        const m = highlights.get(`${t.c},${t.r}`);
+        if (!m) continue;
+        m.visible = true;
+        m.material.color.setHex(color);
+        m.material.opacity = opacity;
+      }
+    }
+  }
+
   function clearHighlights() {
     for (const m of highlights.values()) {
       m.visible = false;
@@ -290,8 +336,10 @@ export function createStage(canvas) {
   function fitCamera() {
     const halfFov = THREE.MathUtils.degToRad(camera.fov) / 2;
     const halfBoard = BOARD_HALF + 0.9; // 枠のぶんの余白
+    // 縦は盤＋ベンチ列ぶん必要
+    const halfDepth = (BOARD_HALF + Math.abs(BENCH_Z) + 0.9) / 2;
     const needH = halfBoard / (Math.tan(halfFov) * camera.aspect); // 横方向で必要な距離
-    const needV = (halfBoard * 0.78) / Math.tan(halfFov); // 傾けて見るぶん縦は短くなる
+    const needV = (halfDepth * 0.96) / Math.tan(halfFov); // 傾けて見るぶん縦は短くなる
     const need = Math.min(Math.max(needH, needV), 30);
 
     // 既定はぴったり収まる距離。寄って見たい人のために少しだけ近づけるようにしておく
@@ -328,6 +376,7 @@ export function createStage(canvas) {
     pickTile,
     pickUnit,
     highlight,
+    highlightGroups,
     highlightOne,
     clearHighlights,
     resize,

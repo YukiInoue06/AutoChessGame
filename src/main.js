@@ -8,9 +8,10 @@ import { createStage, worldOf, COLORS } from "./render/scene.js";
 import { UnitView } from "./render/unitView.js";
 import { Effects } from "./render/effects.js";
 import { BattleEngine, createUnit } from "./core/battle.js";
-import { Game, Phase } from "./core/game.js";
+import { Game, Phase, SQUAD_SIZE } from "./core/game.js";
 import { DamageType, UNIT_TYPES } from "./core/units.js";
 import { PlacementController, isDeployTile } from "./input/placement.js";
+import { isBenchTile } from "./core/board.js";
 import { Hud } from "./ui/hud.js";
 
 const SPEEDS = [1, 1.5, 2, 3];
@@ -48,7 +49,28 @@ const hud = new Hud({
   onStart: () => beginBattle(),
   onSpeedToggle: () => cycleSpeed(),
   onHelp: () => hud.showHelp(),
+  onShop: () => openShop(),
 });
+
+/** 兵舎を開く。買った/売ったぶんは即座に盤へ反映する */
+async function openShop({ first = false } = {}) {
+  if (busy || (phase !== Phase.PREP && !first)) return;
+  busy = true;
+  placement.setActive(false);
+  await hud.showShop(game, {
+    first,
+    onChange: () => {
+      // 所持ユニットが変わったので盤の見た目を作り直す
+      setupPrep();
+      hud.setStats(game);
+    },
+  });
+  busy = false;
+  if (phase === Phase.PREP) {
+    placement.setActive(true);
+    refreshPrepUI();
+  }
+}
 
 const placement = new PlacementController(stage, {
   canPlace: () => phase === Phase.PREP,
@@ -85,12 +107,50 @@ function clearBoard() {
   hud.showInspector(null);
 }
 
-/** 編成と敵ウェーブから、盤上のユニットとその見た目を作る */
-function setupRound() {
+/**
+ * 準備フェーズの見た目を作る。
+ * この時点では戦闘は始まっていないので engine は作らず、
+ * 所持ユニット（盤＋控え）と敵のプレビューをビューとして並べるだけ。
+ */
+function setupPrep() {
   clearBoard();
-  wave = game.buildEnemyWave();
+  engine = null;
 
-  const playerUnits = game.squad.map((s) =>
+  for (const entry of game.roster) {
+    const u = createUnit({
+      typeId: entry.typeId,
+      team: "player",
+      tile: entry.tile,
+      star: entry.star,
+    });
+    const view = new UnitView(u, stage.unitLayer);
+    view.squadEntry = entry;
+    view.setBenched(!entry.onBoard);
+    views.set(u.uid, view);
+  }
+
+  for (const e of wave.units) {
+    const u = createUnit({
+      typeId: e.typeId,
+      team: "enemy",
+      tile: e.tile,
+      star: e.star,
+      power: wave.power,
+    });
+    views.set(u.uid, new UnitView(u, stage.unitLayer));
+  }
+}
+
+/**
+ * 出撃メンバーで戦闘を組み立てる。
+ * 準備フェーズのビューは捨てて作り直すが、位置は同じなので
+ * 登場アニメーションを省けば見た目は連続して見える。
+ */
+function buildBattle() {
+  clearBoard();
+
+  const fielded = game.squad;
+  const playerUnits = fielded.map((s) =>
     createUnit({ typeId: s.typeId, team: "player", tile: s.tile, star: s.star }),
   );
   const enemyUnits = wave.units.map((u) =>
@@ -109,60 +169,116 @@ function setupRound() {
   });
 
   for (const u of engine.units) {
-    const view = new UnitView(u, stage.unitLayer);
-    views.set(u.uid, view);
+    views.set(u.uid, new UnitView(u, stage.unitLayer, { animateSpawn: false }));
   }
-
-  // 味方のビューと編成データを対応づけておく（配置の保存に使う）
   playerUnits.forEach((u, i) => {
-    views.get(u.uid).squadEntry = game.squad[i];
+    views.get(u.uid).squadEntry = fielded[i];
   });
 }
 
 function enterPrep() {
   phase = Phase.PREP;
   game.phase = Phase.PREP;
-  setupRound();
+  wave = game.buildEnemyWave();
+  setupPrep();
   hud.setPhase(phase);
-  hud.setStats(game);
   hud.clearLog();
-  hud.setActionBar({
-    visible: true,
-    label: "バトル開始",
-    hint: `次の相手は <b style="color:#ff6b6b">${wave.name}</b>（★${wave.star}）— コマをドラッグして手前3列に配置しよう`,
-  });
+  refreshPrepUI();
   placement.setActive(true);
   hud.announce(`ラウンド ${game.round}`, "info");
 }
 
-/** ドラッグで配置。味方が居るマスなら入れ替える */
+/**
+ * ドラッグで配置する。
+ * 盤 ⇄ 控え列をまたぐと出撃/待機が切り替わり、コスト上限のチェックが入る。
+ * 味方が居るマスに落とした場合は入れ替え。
+ */
 function placeUnit(view, tile) {
-  if (!isDeployTile(tile)) {
+  const entry = view.squadEntry;
+  if (!isDeployTile(tile) || !entry) {
     view.snapTo(view.unit.tile);
     return;
   }
-  const occupant = [...views.values()].find(
-    (v) => v !== view && v.unit.alive && v.unit.tile.c === tile.c && v.unit.tile.r === tile.r,
-  );
 
-  if (occupant) {
-    if (occupant.unit.team !== "player") {
+  const toBench = isBenchTile(tile);
+  const occupant = [...views.values()].find(
+    (v) =>
+      v !== view &&
+      v.unit.alive &&
+      v.unit.tile.c === tile.c &&
+      v.unit.tile.r === tile.r,
+  );
+  if (occupant && occupant.unit.team !== "player") {
+    view.snapTo(view.unit.tile);
+    return;
+  }
+  const other = occupant?.squadEntry ?? null;
+  const from = { ...entry.tile };
+
+  if (toBench === !entry.onBoard) {
+    // 同じ領域内での移動。相手が居ればマスを交換するだけ
+    if (other) {
+      other.tile = from;
+      occupant.unit.tile = { ...from };
+      occupant.snapTo(from);
+    }
+    entry.tile = { c: tile.c, r: tile.r };
+  } else if (toBench) {
+    // 盤 → 控え。入れ替え相手が控えに居るならその相手を盤へ
+    game.unfield(entry, tile);
+    if (other && !other.onBoard) {
+      game.field(other, from);
+      occupant.unit.tile = { ...from };
+      occupant.snapTo(from);
+      occupant.setBenched(false);
+    }
+  } else {
+    // 控え → 盤。コストと人数の上限を満たすか確認する
+    if (other?.onBoard) game.unfield(other, from); // 先に相手を控えへ退避
+    const check = game.canField(entry);
+    if (!check.ok) {
+      if (other?.onBoard === false && other.tile.r === from.r) game.field(other, tile);
       view.snapTo(view.unit.tile);
+      hud.toast(check.reason);
+      refreshPrepUI();
       return;
     }
-    const from = { ...view.unit.tile };
-    occupant.unit.tile = from;
-    occupant.snapTo(from);
-    if (occupant.squadEntry) occupant.squadEntry.tile = { ...from };
+    game.field(entry, tile);
+    if (other) {
+      occupant.unit.tile = { ...other.tile };
+      occupant.snapTo(other.tile);
+      occupant.setBenched(!other.onBoard);
+    }
   }
 
   view.unit.tile = { c: tile.c, r: tile.r };
   view.snapTo(tile);
-  if (view.squadEntry) view.squadEntry.tile = { c: tile.c, r: tile.r };
+  view.setBenched(!entry.onBoard);
+  refreshPrepUI();
+}
+
+/** ゴールド・コスト表示とバトル開始ボタンの状態を更新する */
+function refreshPrepUI() {
+  hud.setStats(game);
+  const fielded = game.squad.length;
+  hud.setActionBar({
+    visible: phase === Phase.PREP,
+    label: "バトル開始",
+    disabled: fielded === 0,
+    hint:
+      `次の相手は <b style="color:#ff6b6b">${wave?.name ?? "?"}</b>（★${wave?.star ?? 1}）／ ` +
+      `出撃 <b>${fielded}</b>/${SQUAD_SIZE}体・コスト <b>${game.deployCost}</b>/${game.deployLimit}` +
+      (fielded === 0 ? ' — <b style="color:#ff6b6b">1体以上を盤に出そう</b>' : ""),
+  });
 }
 
 function beginBattle() {
   if (phase !== Phase.PREP || busy) return;
+  if (game.squad.length === 0) {
+    hud.toast("盤に1体以上を出してください");
+    return;
+  }
+  buildBattle();
   phase = Phase.BATTLE;
   game.phase = Phase.BATTLE;
   placement.setActive(false);
@@ -383,6 +499,7 @@ async function onBattleEnd(winner) {
 
   const mvp = pickMvp();
   const outcome = game.applyResult(winner);
+  const income = game.grantIncome(win);
   hud.setStats(game);
 
   if (outcome === "gameover") {
@@ -390,30 +507,26 @@ async function onBattleEnd(winner) {
     game.reset();
     hud.setStats(game);
     busy = false;
-    await startSelectFlow();
+    await startNewRun();
     return;
   }
 
   const res = await hud.showRoundResult({
     win,
     round: win ? game.round - 1 : game.round,
-    squad: game.squad,
+    roster: game.roster,
     enemyName: wave.name,
     mvp,
     life: game.life,
+    income,
+    gold: game.gold,
   });
 
-  if (res.upgradeIndex != null && game.squad[res.upgradeIndex]) {
-    game.upgrade(game.squad[res.upgradeIndex]);
-  }
+  if (res.upgradeId != null) game.upgrade(game.byId(res.upgradeId));
 
   busy = false;
-
-  if (res.action === "reroster") {
-    await startSelectFlow();
-  } else {
-    enterPrep();
-  }
+  enterPrep();
+  if (res.action === "shop") await openShop();
 }
 
 function pickMvp() {
@@ -425,19 +538,17 @@ function pickMvp() {
   return { name: `${top.def.name}${stars}`, damage: Math.round(top.damageDealt) };
 }
 
-async function startSelectFlow() {
+/** 新しい挑戦のはじまり。まず兵舎でユニットを雇う */
+async function startNewRun() {
   phase = Phase.SELECT;
   game.phase = Phase.SELECT;
   hud.setPhase(phase);
   hud.setActionBar({ visible: false });
   placement.setActive(false);
 
-  const prevStars = new Map(game.squad.map((s) => [s.typeId, s.star]));
-  const picks = await hud.showRosterSelect(game.squad.map((s) => s.typeId));
-  game.setSquad(picks);
-  // 続投するコマは★を引き継ぐ
-  for (const s of game.squad) s.star = prevStars.get(s.typeId) ?? 1;
-
+  wave = game.buildEnemyWave();
+  setupPrep();
+  await openShop({ first: true });
   enterPrep();
 }
 
@@ -497,7 +608,7 @@ async function boot() {
 
   await hud.showTitle(game.best);
   clearBoard();
-  await startSelectFlow();
+  await startNewRun();
 }
 
 /** タイトル背景に飾るコマたち */

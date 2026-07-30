@@ -2,11 +2,12 @@
  * 準備フェーズのドラッグ配置 & コマ選択（インスペクタ表示）。
  */
 
-import { PLAYER_ROWS, SIZE } from "../core/board.js";
+import { BENCH_TILES, PLAYER_ROWS, SIZE, isBenchTile } from "../core/board.js";
 import { worldOf } from "../render/scene.js";
 
 const DRAG_THRESHOLD = 6; // px。これ未満の移動はクリック扱い
 
+/** 盤上の配置可能マス（自陣3列） */
 export const DEPLOY_TILES = PLAYER_ROWS.flatMap((r) =>
   Array.from({ length: SIZE }, (_, c) => ({ c, r })),
 );
@@ -47,7 +48,10 @@ export class PlacementController {
 
   showDeployZone() {
     if (!this.active) return;
-    this.stage.highlight(DEPLOY_TILES, 0x5ad2ff, 0.22);
+    this.stage.highlightGroups([
+      { tiles: DEPLOY_TILES, color: 0x5ad2ff, opacity: 0.22 },
+      { tiles: BENCH_TILES, color: 0xf5c451, opacity: 0.16 },
+    ]);
   }
 
   _setHover(view) {
@@ -136,6 +140,7 @@ export class PlacementController {
   }
 }
 
+/** ドラッグで落とせるマス（自陣3列＋控え列） */
 export function isDeployTile(tile) {
-  return PLAYER_ROWS.includes(tile.r);
+  return !!tile && (PLAYER_ROWS.includes(tile.r) || isBenchTile(tile));
 }
