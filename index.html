@@ -72,22 +72,31 @@
       <ul class="log__list" id="logList"></ul>
     </section>
 
-    <!-- 選択中ユニットの詳細 -->
-    <aside class="inspector" id="inspector" hidden>
-      <div class="inspector__head">
-        <span class="inspector__glyph" id="inspGlyph">♙</span>
-        <div>
-          <div class="inspector__name" id="inspName">ポーン</div>
-          <div class="inspector__stars" id="inspStars">★</div>
+    <!-- 左レール: 特性（組み合わせバフ）と、選択中ユニットの詳細 -->
+    <div class="leftrail">
+      <section class="traits" id="traits" hidden>
+        <div class="traits__title">特性</div>
+        <ul class="traits__list" id="traitList"></ul>
+      </section>
+
+      <aside class="inspector" id="inspector" hidden>
+        <div class="inspector__head">
+          <span class="inspector__glyph" id="inspGlyph">♙</span>
+          <div>
+            <div class="inspector__name" id="inspName">ポーン</div>
+            <div class="inspector__stars" id="inspStars">★</div>
+          </div>
         </div>
-      </div>
-      <dl class="inspector__stats" id="inspStats"></dl>
-      <div class="inspector__skill">
-        <div class="inspector__skillName" id="inspSkillName"></div>
-        <p class="inspector__skillText" id="inspSkillText"></p>
-      </div>
-      <div class="inspector__move" id="inspMove"></div>
-    </aside>
+        <div class="inspector__traits" id="inspTraits"></div>
+        <dl class="inspector__stats" id="inspStats"></dl>
+        <div class="inspector__skill">
+          <div class="inspector__skillName" id="inspSkillName"></div>
+          <p class="inspector__skillText" id="inspSkillText"></p>
+        </div>
+        <div class="inspector__move" id="inspMove"></div>
+      </aside>
+    </div>
+
   </div>
 
   <!-- ===== オーバーレイ ===== -->

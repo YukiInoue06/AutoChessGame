@@ -13,6 +13,7 @@ import {
   buildStats,
   cssColorOf,
 } from "../core/units.js";
+import { TRAITS, activeTraits } from "../core/traits.js";
 import {
   Phase,
   MAX_LEVEL,
@@ -60,6 +61,9 @@ export class Hud {
       inspName: $("inspName"),
       inspStars: $("inspStars"),
       inspStats: $("inspStats"),
+      traits: $("traits"),
+      traitList: $("traitList"),
+      inspTraits: $("inspTraits"),
       inspSkillName: $("inspSkillName"),
       inspSkillText: $("inspSkillText"),
       inspMove: $("inspMove"),
@@ -99,6 +103,35 @@ export class Hud {
     const need = game.xpToNext;
     this.el.xp.style.width = need ? `${Math.min(100, (game.xp / need) * 100)}%` : "100%";
     this.el.xp.dataset.max = need ? "false" : "true";
+  }
+
+  /**
+   * 特性パネルを描く。
+   * @param {ReturnType<typeof activeTraits>} list
+   */
+  setTraits(list) {
+    this.el.traits.hidden = !list.length;
+    this.el.traitList.replaceChildren();
+    for (const { trait, count, tier, next } of list) {
+      const li = document.createElement("li");
+      li.className = "trait";
+      li.style.setProperty("--hue", trait.color);
+      li.dataset.active = tier ? "true" : "false";
+      li.title = `${trait.name} — ${trait.desc}\n` +
+        trait.tiers
+          .map((t) => `${t.need}種: ${t.text}`)
+          .join("\n");
+      li.innerHTML = `
+        <span class="trait__dot"></span>
+        <span class="trait__name">${trait.name}
+          <span class="trait__tier">${
+            tier ? tier.text : `あと${next.need - count}種で発動`
+          }</span>
+        </span>
+        <span class="trait__count">${count}${next ? ` / ${next.need}` : ""}</span>
+      `;
+      this.el.traitList.appendChild(li);
+    }
   }
 
   /** 短いメッセージを一瞬だけ出す（コスト上限に引っかかった時など） */
@@ -178,6 +211,7 @@ export class Hud {
     this.el.inspName.textContent = d.name;
     this.el.inspName.style.color = unit.team === "player" ? "#5ad2ff" : "#ff6b6b";
     this.el.inspStars.textContent = "★".repeat(unit.star);
+    this.el.inspTraits.innerHTML = traitChips(d.traits);
 
     const rows = [
       ["HP", `${Math.ceil(unit.hp)} / ${unit.maxHp}`],
@@ -513,6 +547,7 @@ export class Hud {
       <div class="card__glyph" style="color:${hue}">${t.glyph}</div>
       <div class="card__name">${t.name}${star > 1 ? ` <span style="color:#f5c451">${"★".repeat(star)}</span>` : ""}</div>
       <div class="card__role">${t.role}</div>
+      <div class="card__traits">${traitChips(t.traits)}</div>
       <div class="card__bars">
         ${bar("HP", clamp01(s.maxHp / (STAT_MAX.hp * star)), "hp")}
         ${bar("ATK", clamp01(s.atk / (STAT_MAX.atk * star)), "atk")}
@@ -602,6 +637,17 @@ export class Hud {
       });
     });
   }
+}
+
+/** 特性名の小さなチップ */
+function traitChips(ids = []) {
+  return ids
+    .map((id) => {
+      const t = TRAITS[id];
+      if (!t) return "";
+      return `<span class="traitchip" style="color:${t.color}">${t.name}</span>`;
+    })
+    .join("");
 }
 
 function bar(label, ratio, kind) {

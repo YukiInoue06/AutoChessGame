@@ -79,6 +79,7 @@ export const DamageType = { PHYSICAL: "physical", MAGIC: "magic", TRUE: "true" }
 export const UNIT_TYPES = {
   pawn: {
     id: "pawn",
+    traits: ["chess", "blade"],
     color: 0x94a3b8, // スレート
     family: "chess",
     cost: 1,
@@ -117,6 +118,7 @@ export const UNIT_TYPES = {
 
   knight: {
     id: "knight",
+    traits: ["chess", "swift"],
     color: 0x8b5cf6, // 紫
     family: "chess",
     cost: 3,
@@ -144,6 +146,7 @@ export const UNIT_TYPES = {
 
   bishop: {
     id: "bishop",
+    traits: ["chess", "mage"],
     color: 0x38bdf8, // 空色
     family: "chess",
     cost: 2,
@@ -171,6 +174,7 @@ export const UNIT_TYPES = {
 
   rook: {
     id: "rook",
+    traits: ["chess", "heavy"],
     color: 0xa3722b, // 茶
     family: "chess",
     cost: 3,
@@ -198,6 +202,7 @@ export const UNIT_TYPES = {
 
   queen: {
     id: "queen",
+    traits: ["chess", "mage"],
     color: 0xe0348a, // マゼンタ
     family: "chess",
     cost: 5,
@@ -225,6 +230,7 @@ export const UNIT_TYPES = {
 
   king: {
     id: "king",
+    traits: ["chess", "support"],
     color: 0xf2c14e, // 金
     family: "chess",
     cost: 4,
@@ -256,6 +262,7 @@ export const UNIT_TYPES = {
 
   warrior: {
     id: "warrior",
+    traits: ["adventurer", "blade"],
     color: 0xe2533f, // 朱
     family: "job",
     cost: 2,
@@ -283,6 +290,7 @@ export const UNIT_TYPES = {
 
   paladin: {
     id: "paladin",
+    traits: ["royal", "heavy"],
     color: 0x3f74d8, // 青
     family: "job",
     cost: 5,
@@ -310,6 +318,7 @@ export const UNIT_TYPES = {
 
   archer: {
     id: "archer",
+    traits: ["adventurer", "ranger"],
     color: 0x4ade80, // 若草
     family: "job",
     cost: 2,
@@ -337,6 +346,7 @@ export const UNIT_TYPES = {
 
   cleric: {
     id: "cleric",
+    traits: ["adventurer", "support"],
     color: 0x6ee7d0, // ミント
     family: "job",
     cost: 3,
@@ -364,6 +374,7 @@ export const UNIT_TYPES = {
 
   wizard: {
     id: "wizard",
+    traits: ["arcane", "mage"],
     color: 0xfb8c3c, // 橙
     family: "job",
     cost: 3,
@@ -391,6 +402,7 @@ export const UNIT_TYPES = {
 
   thief: {
     id: "thief",
+    traits: ["shadow", "swift"],
     color: 0xa3e635, // ライム
     family: "job",
     cost: 2,
@@ -418,6 +430,7 @@ export const UNIT_TYPES = {
 
   dragoon: {
     id: "dragoon",
+    traits: ["royal", "blade"],
     color: 0x0f9b8e, // 碧
     family: "job",
     cost: 4,
@@ -445,6 +458,7 @@ export const UNIT_TYPES = {
 
   ninja: {
     id: "ninja",
+    traits: ["shadow", "swift"],
     color: 0x46367a, // 藍紫
     family: "job",
     cost: 3,
@@ -472,6 +486,7 @@ export const UNIT_TYPES = {
 
   berserker: {
     id: "berserker",
+    traits: ["adventurer", "blade"],
     color: 0xa01f2e, // 深紅
     family: "job",
     cost: 4,
@@ -501,6 +516,7 @@ export const UNIT_TYPES = {
 
   sniper: {
     id: "sniper",
+    traits: ["shadow", "ranger"],
     color: 0x3f7d3a, // 深緑
     family: "job",
     cost: 4,
@@ -528,6 +544,7 @@ export const UNIT_TYPES = {
 
   summoner: {
     id: "summoner",
+    traits: ["arcane", "support"],
     color: 0xc084fc, // 藤
     family: "job",
     cost: 4,
@@ -555,6 +572,7 @@ export const UNIT_TYPES = {
 
   bard: {
     id: "bard",
+    traits: ["adventurer", "support"],
     color: 0xfb7185, // 桃
     family: "job",
     cost: 3,
@@ -584,6 +602,7 @@ export const UNIT_TYPES = {
 
   icemage: {
     id: "icemage",
+    traits: ["arcane", "mage"],
     color: 0xa8e6ff, // 氷
     family: "job",
     cost: 3,
@@ -611,6 +630,7 @@ export const UNIT_TYPES = {
 
   guardian: {
     id: "guardian",
+    traits: ["royal", "heavy"],
     color: 0xc9b18a, // 砂
     family: "job",
     cost: 4,
@@ -639,6 +659,7 @@ export const UNIT_TYPES = {
   // 召喚専用（編成では選べない）
   golem: {
     id: "golem",
+    traits: [],
     color: 0x8b8178, // 岩
     family: "job",
     cost: 0,

@@ -12,6 +12,7 @@ import { Game, Phase } from "./core/game.js";
 import { DamageType, UNIT_TYPES } from "./core/units.js";
 import { PlacementController, isDeployTile } from "./input/placement.js";
 import { isBenchTile } from "./core/board.js";
+import { activeTraits } from "./core/traits.js";
 import { Hud } from "./ui/hud.js";
 
 const SPEEDS = [1, 1.5, 2, 3];
@@ -257,9 +258,14 @@ function placeUnit(view, tile) {
   refreshPrepUI();
 }
 
-/** ゴールド・レベル表示とバトル開始ボタンの状態を更新する */
+/** ゴールド・レベル・特性の表示とバトル開始ボタンの状態を更新する */
 function refreshPrepUI() {
   hud.setStats(game);
+  // 盤に出ているユニットから、いま効いている特性を出す
+  hud.setTraits(activeTraits(game.squad.map((u) => ({
+    typeId: u.typeId,
+    def: UNIT_TYPES[u.typeId],
+  }))));
   const fielded = game.squad.length;
   hud.setActionBar({
     visible: phase === Phase.PREP,
@@ -287,6 +293,13 @@ function beginBattle() {
   hud.setActionBar({ visible: false });
   hud.log(`<em>ラウンド ${game.round}</em> — 対 <b class="enemy">${wave.name}</b>`);
   hud.announce("BATTLE!", "danger");
+  hud.setTraits(engine.traits.get("player") ?? []);
+
+  for (const a of engine.traits.get("player") ?? []) {
+    if (a.tier) {
+      hud.log(`<em>${a.trait.name} ${a.count}</em> — ${a.tier.text}`);
+    }
+  }
 
   for (const v of views.values()) {
     const enemies = engine.units.filter((u) => u.alive && u.team !== v.unit.team);

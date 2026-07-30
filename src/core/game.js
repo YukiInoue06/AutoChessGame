@@ -65,32 +65,33 @@ for (const id of UNIT_IDS) (BY_COST[UNIT_TYPES[id].cost] ??= []).push(id);
 const ENEMY_SCRIPT = [
   {
     comp: ["pawn", "pawn", "warrior", "rook", "archer"],
-    power: 0.78,
+    power: 0.72,
     name: "農民兵団",
   },
   {
     comp: ["thief", "archer", "knight", "warrior", "cleric"],
-    power: 0.9,
+    power: 0.86,
     name: "斥候隊",
   },
   {
+    // 重装3+王家2 がそろう編成。特性ぶん強くなるので基礎値は抑えめ。
     comp: ["paladin", "guardian", "rook", "bishop", "cleric"],
-    power: 1.0,
+    power: 0.8,
     name: "城塞守備隊",
   },
   {
     comp: ["knight", "dragoon", "warrior", "queen", "king"],
-    power: 1.1,
+    power: 1.0,
     name: "王家の騎兵",
   },
   {
     comp: ["wizard", "icemage", "bishop", "sniper", "guardian"],
-    power: 1.2,
+    power: 1.09,
     name: "魔導砲兵",
   },
   {
     comp: ["king", "paladin", "queen", "ninja", "berserker"],
-    power: 1.32,
+    power: 1.12,
     name: "黒王の親衛隊",
   },
 ];
@@ -506,7 +507,7 @@ export class Game {
     } else {
       const extra = this.round - ENEMY_SCRIPT.length;
       comp = Array.from({ length: this.maxUnits }, () => pick(UNIT_IDS));
-      power = 1.32 + extra * 0.09;
+      power = 1.12 + extra * 0.085;
       name = pick(LATE_NAMES);
     }
 

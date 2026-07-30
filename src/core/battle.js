@@ -7,6 +7,7 @@
 
 import { buildStats, DamageType } from "./units.js";
 import { chebyshev, key, stepToward } from "./board.js";
+import { applyTraits } from "./traits.js";
 
 /** 通常攻撃1回で得られるマナ */
 const MANA_PER_ATTACK = 10;
@@ -88,13 +89,19 @@ export class BattleEngine {
   /**
    * @param {{units: object[], onEvent?: (type:string, payload:object)=>void}} opts
    */
-  constructor({ units, onEvent = () => {} }) {
+  constructor({ units, onEvent = () => {}, useTraits = true }) {
     this.units = units;
     this.onEvent = onEvent;
     this.time = 0;
     this.finished = false;
     this.winner = null; // 'player' | 'enemy' | 'draw'
     this._suddenDeathAnnounced = false;
+    /**
+     * 特性（組み合わせバフ）を戦闘開始前に焼き込む。
+     * ここでやっておけば、ゲーム本体も検証スクリプトも同じ結果になる。
+     * @type {Map<string, object[]>}
+     */
+    this.traits = useTraits ? applyTraits(this.units) : new Map();
   }
 
   // ---------------------------------------------------------------- helpers
