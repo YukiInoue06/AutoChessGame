@@ -2,7 +2,7 @@
   "name": "auto-chess-arena",
   "version": "0.1.0",
   "private": true,
-  "description": "チェス盤の上で戦う 5v5 オートチェス（1人プレイ・3D）",
+  "description": "チェス盤の上で戦う 5v5 オートチェス（1人プレイ・3D・全20種のユニット）",
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.js",

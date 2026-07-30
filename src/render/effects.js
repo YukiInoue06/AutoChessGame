@@ -195,6 +195,31 @@ export class Effects {
     this.impact(centerTile, color, 1.4);
   }
 
+  /** 狙撃の弾道（2点を結ぶ細い光の線） */
+  tracer(from, to, color) {
+    const dir = to.clone().sub(from);
+    const len = dir.length();
+    if (len < 0.01) return;
+
+    const geo = new THREE.CylinderGeometry(0.018, 0.018, len, 6, 1, true);
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const beam = new THREE.Mesh(geo, mat);
+    beam.position.copy(from).addScaledVector(dir, 0.5);
+    // 円柱の軸(+Y)を from→to の向きへ倒す
+    beam.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      dir.clone().normalize(),
+    );
+    this.layer.add(beam);
+    this.items.push({ obj: beam, t: 0, life: 0.3, kind: "tracer" });
+  }
+
   /** 天から降りる光柱（スキル詠唱の合図） */
   castPillar(pos, color) {
     const geo = new THREE.CylinderGeometry(0.34, 0.5, 3.2, 20, 1, true);
@@ -261,6 +286,11 @@ export class Effects {
         case "pillar": {
           it.obj.material.opacity = 0.55 * (1 - k);
           it.obj.scale.set(1 + k * 0.4, 1, 1 + k * 0.4);
+          break;
+        }
+        case "tracer": {
+          it.obj.material.opacity = 0.95 * (1 - k);
+          it.obj.scale.set(1 - k * 0.7, 1, 1 - k * 0.7);
           break;
         }
         default:

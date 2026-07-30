@@ -5,7 +5,13 @@
  * `const picks = await hud.showRosterSelect()` のように書ける。
  */
 
-import { STAT_MAX, UNIT_TYPES, UNIT_IDS, buildStats } from "../core/units.js";
+import {
+  STAT_MAX,
+  UNIT_TYPES,
+  CHESS_IDS,
+  JOB_IDS,
+  buildStats,
+} from "../core/units.js";
 import { Phase, SQUAD_SIZE } from "../core/game.js";
 
 const $ = (id) => document.getElementById(id);
@@ -186,12 +192,12 @@ export class Hud {
         <h1 class="title">AUTO CHESS ARENA</h1>
         <p class="subtitle">${SQUAD_SIZE} vs ${SQUAD_SIZE} ・ チェス盤オートバトル</p>
         <p>
-          チェスのコマを${SQUAD_SIZE}体えらんで盤に並べ、あとは見守るだけ。
-          コマは<b>本物のチェスと同じ動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
+          チェスのコマとRPGジョブ、全20種類から${SQUAD_SIZE}体えらんで盤に並べ、あとは見守るだけ。
+          コマは<b>それぞれの動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
         </p>
         <h3>ルール</h3>
         <ol class="helplist">
-          <li><b>編成</b> — 6種類のコマから${SQUAD_SIZE}体を選ぶ</li>
+          <li><b>編成</b> — 20種類のユニットから${SQUAD_SIZE}体を選ぶ</li>
           <li><b>準備</b> — 手前3列の好きなマスにドラッグで配置</li>
           <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち</li>
           <li><b>成長</b> — 勝つたびに1体を★アップ、負けるとライフが1減る</li>
@@ -221,10 +227,11 @@ export class Hud {
       </ul>
       <h3>戦闘のしくみ</h3>
       <ul class="helplist">
-        <li>各コマは<b>いちばん近い敵</b>を狙い、チェスの動き方で近づきます</li>
+        <li>各コマは<b>いちばん近い敵</b>を狙い、それぞれの移動パターンで近づきます</li>
         <li>射程内に入ると自動で攻撃。攻撃と被弾で<b>マナ</b>が溜まります</li>
         <li>マナが満タンになると<b>スキル</b>を発動（足元のリングが金色に光ります）</li>
         <li>物理ダメージは防御、魔法ダメージは魔法防御で軽減されます</li>
+        <li>チェスのコマは本家どおりの動き方、RPGジョブは役割に合わせた動き方をします</li>
         <li>40秒経過で<b>サドンデス</b>。全員がじわじわ削られます</li>
       </ul>
       <div class="overlay__actions">
@@ -235,7 +242,7 @@ export class Hud {
   }
 
   /**
-   * 編成選択。
+   * 編成選択。チェスのコマとRPGジョブの2群から選ぶ。
    * @param {string[]} initial すでに選んでいるコマ
    * @returns {Promise<string[]>}
    */
@@ -243,8 +250,13 @@ export class Hud {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <h2>編成を組む</h2>
-        <p style="margin-top:4px">出撃させる${SQUAD_SIZE}体を選ぼう。前衛・後衛・支援のバランスが勝敗を分ける。</p>
-        <div class="roster roster--pick" id="rosterGrid"></div>
+        <p style="margin-top:4px">
+          出撃させる${SQUAD_SIZE}体を選ぼう。前衛・後衛・支援のバランスが勝敗を分ける。
+        </p>
+        <h3>チェスのコマ — 本家どおりの動き方をする</h3>
+        <div class="roster" id="gridChess"></div>
+        <h3>RPGジョブ — 役割に特化した動きとスキル</h3>
+        <div class="roster" id="gridJob"></div>
         <div class="overlay__actions">
           <span class="overlay__note" id="rosterNote"></span>
           <button class="btn" data-act="clear">選び直す</button>
@@ -252,19 +264,19 @@ export class Hud {
         </div>
       `);
 
-      const grid = p.querySelector("#rosterGrid");
       const note = p.querySelector("#rosterNote");
       const ok = p.querySelector('[data-act="ok"]');
-      const selected = [...initial];
+      const selected = initial.filter((id) => UNIT_TYPES[id]).slice(0, SQUAD_SIZE);
 
-      for (const id of UNIT_IDS) {
-        grid.appendChild(this._unitCard(id));
-      }
+      const chessGrid = p.querySelector("#gridChess");
+      const jobGrid = p.querySelector("#gridJob");
+      for (const id of CHESS_IDS) chessGrid.appendChild(this._unitCard(id));
+      for (const id of JOB_IDS) jobGrid.appendChild(this._unitCard(id));
+      const cards = [...p.querySelectorAll(".card")];
 
       const refresh = () => {
-        for (const card of grid.children) {
-          const id = card.dataset.id;
-          const i = selected.indexOf(id);
+        for (const card of cards) {
+          const i = selected.indexOf(card.dataset.id);
           card.dataset.selected = i >= 0 ? "true" : "false";
           card.dataset.disabled =
             i < 0 && selected.length >= SQUAD_SIZE ? "true" : "false";
@@ -282,7 +294,13 @@ export class Hud {
         ok.disabled = selected.length !== SQUAD_SIZE;
       };
 
-      grid.addEventListener("click", (e) => {
+      // カードをクリックしたときにフォーカス移動でパネルが勝手にスクロールするのを防ぐ
+      // （キーボードの Tab 移動は残る）
+      p.addEventListener("mousedown", (e) => {
+        if (e.target.closest(".card")) e.preventDefault();
+      });
+
+      p.addEventListener("click", (e) => {
         const card = e.target.closest(".card");
         if (!card) return;
         const id = card.dataset.id;
@@ -312,6 +330,7 @@ export class Hud {
     card.type = "button";
     card.className = "card";
     card.dataset.id = typeId;
+    card.title = `${t.name}（${t.role}）\n移動: ${t.moveText}\n${t.skill.name}: ${t.skill.text}`;
     card.innerHTML = `
       <div class="card__glyph">${t.glyph}</div>
       <div class="card__name">${t.name}${star > 1 ? ` <span style="color:#f5c451">${"★".repeat(star)}</span>` : ""}</div>

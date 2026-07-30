@@ -1,8 +1,9 @@
 /**
  * ユニット定義。
  *
- * このゲームのユニットはチェスのコマそのものであり、
- * 「移動パターン」も本家チェスのルールを踏襲する（スライド系は最大距離のみ制限）。
+ * ユニットは2系統ある。
+ *  - family "chess": チェスのコマ。移動は本家チェスのルールを踏襲する
+ *  - family "job":   RPGのジョブ。移動パターンは役割に合わせて自由に設定する
  *
  * 攻撃射程は Chebyshev 距離（キング距離）で判定する。
  */
@@ -37,6 +38,36 @@ const KNIGHT_OFFSETS = [
   [-2, 1],
   [-1, 2],
 ];
+/** 竜騎士の跳躍（2マス先へ飛び越える） */
+const LEAP_2 = [
+  [0, 2],
+  [0, -2],
+  [2, 0],
+  [-2, 0],
+  [2, 2],
+  [2, -2],
+  [-2, 2],
+  [-2, -2],
+];
+/** 忍者の跳躍（ナイトの動き＋斜め2マス） */
+const NINJA_OFFSETS = [
+  ...KNIGHT_OFFSETS,
+  [2, 2],
+  [2, -2],
+  [-2, 2],
+  [-2, -2],
+];
+
+// よく使う移動パターン
+const MOVE = {
+  step1: { kind: MoveKind.STEP, dirs: ALL_DIRS, distance: 1 },
+  ortho1: { kind: MoveKind.STEP, dirs: ORTHOGONALS, distance: 1 },
+  ortho2: { kind: MoveKind.SLIDE, dirs: ORTHOGONALS, distance: 2 },
+  diag2: { kind: MoveKind.SLIDE, dirs: DIAGONALS, distance: 2 },
+  any2: { kind: MoveKind.SLIDE, dirs: ALL_DIRS, distance: 2 },
+  leap2: { kind: MoveKind.JUMP, dirs: LEAP_2, distance: 1 },
+  ninja: { kind: MoveKind.JUMP, dirs: NINJA_OFFSETS, distance: 1 },
+};
 
 /** ダメージ種別 */
 export const DamageType = { PHYSICAL: "physical", MAGIC: "magic", TRUE: "true" };
@@ -48,6 +79,7 @@ export const DamageType = { PHYSICAL: "physical", MAGIC: "magic", TRUE: "true" }
 export const UNIT_TYPES = {
   pawn: {
     id: "pawn",
+    family: "chess",
     name: "ポーン",
     role: "前衛 / ファイター",
     glyph: "♙",
@@ -83,6 +115,7 @@ export const UNIT_TYPES = {
 
   knight: {
     id: "knight",
+    family: "chess",
     name: "ナイト",
     role: "強襲 / アサシン",
     glyph: "♘",
@@ -107,6 +140,7 @@ export const UNIT_TYPES = {
 
   bishop: {
     id: "bishop",
+    family: "chess",
     name: "ビショップ",
     role: "後衛 / メイジ",
     glyph: "♗",
@@ -131,6 +165,7 @@ export const UNIT_TYPES = {
 
   rook: {
     id: "rook",
+    family: "chess",
     name: "ルーク",
     role: "壁 / タンク",
     glyph: "♖",
@@ -155,6 +190,7 @@ export const UNIT_TYPES = {
 
   queen: {
     id: "queen",
+    family: "chess",
     name: "クイーン",
     role: "主砲 / キャリー",
     glyph: "♕",
@@ -179,6 +215,7 @@ export const UNIT_TYPES = {
 
   king: {
     id: "king",
+    family: "chess",
     name: "キング",
     role: "支援 / バッファー",
     glyph: "♔",
@@ -202,15 +239,400 @@ export const UNIT_TYPES = {
       text: "味方全員のHPを220回復し、8秒間 攻撃力を25%上昇させる。",
     },
   },
+
+  // ---------------------------------------------------------------- RPGジョブ
+
+  warrior: {
+    id: "warrior",
+    family: "job",
+    name: "戦士",
+    role: "前衛 / ファイター",
+    glyph: "⚔️",
+    glyphDark: "⚔️",
+    hp: 780,
+    atk: 62,
+    attackSpeed: 0.75,
+    range: 1,
+    armor: 42,
+    resist: 22,
+    moveInterval: 0.68,
+    manaMax: 70,
+    manaStart: 15,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    skill: {
+      name: "なぎ払い",
+      text: "隣接するすべての敵に攻撃力170%の物理ダメージを与える。",
+    },
+  },
+
+  paladin: {
+    id: "paladin",
+    family: "job",
+    name: "聖騎士",
+    role: "壁 / プロテクター",
+    glyph: "🛡️",
+    glyphDark: "🛡️",
+    hp: 1060,
+    atk: 44,
+    attackSpeed: 0.6,
+    range: 1,
+    armor: 66,
+    resist: 46,
+    moveInterval: 0.95,
+    manaMax: 80,
+    manaStart: 20,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.ortho2,
+    moveText: "縦横に最大2マス滑走",
+    skill: {
+      name: "聖なる誓い",
+      text: "自分と隣接する味方に320のシールドを8秒間与え、自分の防御力を+40する。",
+    },
+  },
+
+  archer: {
+    id: "archer",
+    family: "job",
+    name: "弓兵",
+    role: "後衛 / アタッカー",
+    glyph: "🏹",
+    glyphDark: "🏹",
+    hp: 480,
+    atk: 58,
+    attackSpeed: 0.85,
+    range: 4,
+    armor: 16,
+    resist: 18,
+    moveInterval: 0.8,
+    manaMax: 60,
+    manaStart: 15,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.ortho1,
+    moveText: "縦横に1マス",
+    skill: {
+      name: "三連射",
+      text: "対象に攻撃力85%の物理ダメージを3回続けて与える。",
+    },
+  },
+
+  cleric: {
+    id: "cleric",
+    family: "job",
+    name: "僧侶",
+    role: "支援 / ヒーラー",
+    glyph: "✚",
+    glyphDark: "✚",
+    hp: 560,
+    atk: 34,
+    attackSpeed: 0.6,
+    range: 2,
+    armor: 22,
+    resist: 42,
+    moveInterval: 0.8,
+    manaMax: 70,
+    manaStart: 25,
+    damageType: DamageType.MAGIC,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    skill: {
+      name: "癒しの光",
+      text: "HPの割合が最も低い味方2体を390回復し、6秒間 防御力を+20する。",
+    },
+  },
+
+  wizard: {
+    id: "wizard",
+    family: "job",
+    name: "魔術師",
+    role: "後衛 / 範囲メイジ",
+    glyph: "🔥",
+    glyphDark: "🔥",
+    hp: 470,
+    atk: 56,
+    attackSpeed: 0.65,
+    range: 3,
+    armor: 12,
+    resist: 46,
+    moveInterval: 0.9,
+    manaMax: 100,
+    manaStart: 20,
+    damageType: DamageType.MAGIC,
+    move: MOVE.diag2,
+    moveText: "斜めに最大2マス滑走",
+    skill: {
+      name: "メテオ",
+      text: "対象を中心とした5×5の敵全員に320の魔法ダメージを落とす。",
+    },
+  },
+
+  thief: {
+    id: "thief",
+    family: "job",
+    name: "盗賊",
+    role: "遊撃 / 高速",
+    glyph: "🗡️",
+    glyphDark: "🗡️",
+    hp: 520,
+    atk: 46,
+    attackSpeed: 1.15,
+    range: 1,
+    armor: 18,
+    resist: 18,
+    moveInterval: 0.5,
+    manaMax: 50,
+    manaStart: 10,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.any2,
+    moveText: "全方向に最大2マス滑走（足が速い）",
+    skill: {
+      name: "急所突き",
+      text: "攻撃力240%の物理ダメージを与え、4秒間 自分の攻撃速度を+70%する。",
+    },
+  },
+
+  dragoon: {
+    id: "dragoon",
+    family: "job",
+    name: "竜騎士",
+    role: "強襲 / ジャンパー",
+    glyph: "🐲",
+    glyphDark: "🐲",
+    hp: 730,
+    atk: 72,
+    attackSpeed: 0.68,
+    range: 1,
+    armor: 38,
+    resist: 24,
+    moveInterval: 0.8,
+    manaMax: 80,
+    manaStart: 15,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.leap2,
+    moveText: "2マス先へ跳躍（飛び越える）",
+    skill: {
+      name: "ジャンプ",
+      text: "最も遠い敵の隣に飛び降り、攻撃力230%＋周囲に110%の物理ダメージ。",
+    },
+  },
+
+  ninja: {
+    id: "ninja",
+    family: "job",
+    name: "忍者",
+    role: "暗殺 / 妨害",
+    glyph: "🥷",
+    glyphDark: "🥷",
+    hp: 540,
+    atk: 64,
+    attackSpeed: 0.95,
+    range: 1,
+    armor: 20,
+    resist: 22,
+    moveInterval: 0.6,
+    manaMax: 70,
+    manaStart: 15,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.ninja,
+    moveText: "L字＋斜め2マスに跳躍（飛び越える）",
+    skill: {
+      name: "影縫い",
+      text: "攻撃力200%の物理ダメージを与え、対象を2.5秒間 行動不能にする。",
+    },
+  },
+
+  berserker: {
+    id: "berserker",
+    family: "job",
+    name: "狂戦士",
+    role: "前衛 / 火力",
+    glyph: "🪓",
+    glyphDark: "🪓",
+    hp: 840,
+    atk: 74,
+    attackSpeed: 0.7,
+    range: 1,
+    armor: 26,
+    resist: 16,
+    moveInterval: 0.62,
+    manaMax: 80,
+    manaStart: 20,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    passive: { rageAtk: 0.8 },
+    auraText: "パッシブ: 失ったHPの割合に応じて攻撃力が最大+80%",
+    skill: {
+      name: "猛進",
+      text: "8秒間 攻撃力+55%、攻撃速度+35%。",
+    },
+  },
+
+  sniper: {
+    id: "sniper",
+    family: "job",
+    name: "狙撃手",
+    role: "後衛 / 超長射程",
+    glyph: "🎯",
+    glyphDark: "🎯",
+    hp: 430,
+    atk: 90,
+    attackSpeed: 0.45,
+    range: 5,
+    armor: 10,
+    resist: 16,
+    moveInterval: 1.0,
+    manaMax: 90,
+    manaStart: 20,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.ortho1,
+    moveText: "縦横に1マス（遅い）",
+    skill: {
+      name: "ヘッドショット",
+      text: "盤上でHPの割合が最も低い敵に、射程を無視して攻撃力360%の物理ダメージ。",
+    },
+  },
+
+  summoner: {
+    id: "summoner",
+    family: "job",
+    name: "召喚士",
+    role: "後衛 / 召喚",
+    glyph: "👻",
+    glyphDark: "👻",
+    hp: 580,
+    atk: 40,
+    attackSpeed: 0.6,
+    range: 3,
+    armor: 18,
+    resist: 38,
+    moveInterval: 0.85,
+    manaMax: 80,
+    manaStart: 25,
+    damageType: DamageType.MAGIC,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    skill: {
+      name: "魔物召喚",
+      text: "隣のマスにゴーレムを呼び出す（同時に2体まで）。上限のときは既存のゴーレムを回復する。",
+    },
+  },
+
+  bard: {
+    id: "bard",
+    family: "job",
+    name: "吟遊詩人",
+    role: "支援 / バッファー",
+    glyph: "🎵",
+    glyphDark: "🎵",
+    hp: 610,
+    atk: 36,
+    attackSpeed: 0.7,
+    range: 2,
+    armor: 24,
+    resist: 36,
+    moveInterval: 0.75,
+    manaMax: 60,
+    manaStart: 20,
+    damageType: DamageType.MAGIC,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    aura: { asMul: 0.1 },
+    auraText: "オーラ: 味方全体の攻撃速度 +10%",
+    skill: {
+      name: "戦いの歌",
+      text: "味方全体の攻撃速度を8秒間+40%し、マナを20回復させる。",
+    },
+  },
+
+  icemage: {
+    id: "icemage",
+    family: "job",
+    name: "氷術師",
+    role: "後衛 / 制圧",
+    glyph: "❄️",
+    glyphDark: "❄️",
+    hp: 500,
+    atk: 50,
+    attackSpeed: 0.65,
+    range: 3,
+    armor: 14,
+    resist: 44,
+    moveInterval: 0.9,
+    manaMax: 90,
+    manaStart: 20,
+    damageType: DamageType.MAGIC,
+    move: MOVE.diag2,
+    moveText: "斜めに最大2マス滑走",
+    skill: {
+      name: "氷結",
+      text: "対象中心3×3の敵に220の魔法ダメージ。さらに5秒間 攻撃速度を-45%する。",
+    },
+  },
+
+  guardian: {
+    id: "guardian",
+    family: "job",
+    name: "重装兵",
+    role: "壁 / 長柄",
+    glyph: "🔱",
+    glyphDark: "🔱",
+    hp: 920,
+    atk: 52,
+    attackSpeed: 0.62,
+    range: 2,
+    armor: 58,
+    resist: 40,
+    moveInterval: 1.0,
+    manaMax: 75,
+    manaStart: 15,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.ortho1,
+    moveText: "縦横に1マス",
+    skill: {
+      name: "串刺し",
+      text: "対象とその奥2マスまでの敵を貫き、攻撃力190%の物理ダメージ。",
+    },
+  },
+
+  // 召喚専用（編成では選べない）
+  golem: {
+    id: "golem",
+    family: "job",
+    hidden: true,
+    name: "ゴーレム",
+    role: "召喚 / 壁",
+    glyph: "🗿",
+    glyphDark: "🗿",
+    hp: 620,
+    atk: 40,
+    attackSpeed: 0.55,
+    range: 1,
+    armor: 45,
+    resist: 30,
+    moveInterval: 0.9,
+    manaMax: 9999,
+    manaStart: 0,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    skill: { name: "—", text: "スキルを持たない。" },
+  },
 };
 
-export const UNIT_IDS = Object.keys(UNIT_TYPES);
+/** 編成で選べるユニット（召喚専用は除く） */
+export const UNIT_IDS = Object.keys(UNIT_TYPES).filter(
+  (id) => !UNIT_TYPES[id].hidden,
+);
+export const CHESS_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "chess");
+export const JOB_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "job");
 
 /** ★が1つ上がるごとの倍率 */
 export const STAR_SCALE = 1.7;
 
 /** 表示バー用の正規化基準（カードのゲージ） */
-export const STAT_MAX = { hp: 1000, atk: 90, range: 3 };
+export const STAT_MAX = { hp: 1100, atk: 92, range: 5 };
 
 /**
  * ★とラウンド補正を反映した実ステータスを返す。

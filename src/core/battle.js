@@ -5,7 +5,7 @@
  * 起きた出来事は `onEvent` で外へ流し、見た目（3D/UI）はそれを受けて演出する。
  */
 
-import { buildStats, DamageType, UNIT_TYPES } from "./units.js";
+import { buildStats, DamageType } from "./units.js";
 import { chebyshev, key, stepToward } from "./board.js";
 
 /** 通常攻撃1回で得られるマナ */
@@ -14,6 +14,11 @@ const MANA_PER_ATTACK = 10;
 const MANA_ON_HIT_CAP = 20;
 /** スキル詠唱で行動が止まる時間 */
 const CAST_LOCK = 0.35;
+/**
+ * 詠唱直後にマナを得られない時間。
+ * これがないと「味方にマナを与える」スキルが自分に還り、無限に連射できてしまう。
+ */
+const MANA_LOCK = 1.2;
 /**
  * サドンデス開始時刻と、その後の毎秒割合ダメージ（最大HP比）。
  * ★3どうしの終盤戦でも時間切れ判定に流れ込まないよう、強めに効かせる。
@@ -62,12 +67,16 @@ export function createUnit(spec) {
     attackCd: 0.25 + Math.random() * 0.25, // 開幕の同時攻撃をばらす
     moveCd: 0,
     castLock: 0,
+    manaLockUntil: 0,
+    ownerUid: null, // 召喚元
     alive: true,
 
     targetUid: null,
     tauntUid: null,
     tauntUntil: 0,
+    stunUntil: 0, // 行動不能が解けるまでの時刻
     decayDebt: 0, // サドンデスの割合ダメージの端数
+    summoned: false, // 召喚で増えたユニットか
     buffs: [], // {stat:'atkMul'|'armor', value, until}
 
     // 集計用
@@ -112,17 +121,37 @@ export class BattleEngine {
     return map;
   }
 
-  /** キングのオーラを含めた実効攻撃力 */
+  /**
+   * 生存している味方のオーラを合計する（キングの攻撃力、吟遊詩人の攻撃速度など）。
+   */
+  auraOf(team) {
+    let atkMul = 0;
+    let asMul = 0;
+    for (const o of this.units) {
+      if (!o.alive || o.team !== team || !o.def.aura) continue;
+      atkMul += o.def.aura.atkMul ?? 0;
+      asMul += o.def.aura.asMul ?? 0;
+    }
+    return { atkMul, asMul };
+  }
+
+  /** オーラ・バフ・パッシブを反映した実効攻撃力 */
   effectiveAtk(u) {
-    let mul = 1 + u.atkMulPerm;
+    let mul = 1 + u.atkMulPerm + this.auraOf(u.team).atkMul;
     for (const b of u.buffs) if (b.stat === "atkMul") mul += b.value;
 
-    const kingAlive = this.units.some(
-      (o) => o.alive && o.team === u.team && o.typeId === "king",
-    );
-    if (kingAlive) mul += UNIT_TYPES.king.aura.atkMul;
+    // 狂戦士: 失ったHPの割合ぶん攻撃力が上がる
+    const rage = u.def.passive?.rageAtk;
+    if (rage) mul += (1 - u.hp / u.maxHp) * rage;
 
     return u.baseAtk * mul;
+  }
+
+  /** バフ・デバフを反映した実効攻撃速度（回/秒） */
+  effectiveAttackSpeed(u) {
+    let mul = 1 + this.auraOf(u.team).asMul;
+    for (const b of u.buffs) if (b.stat === "asMul") mul += b.value;
+    return Math.max(0.15, u.attackSpeed * mul);
   }
 
   effectiveArmor(u) {
@@ -180,6 +209,7 @@ export class BattleEngine {
   _tickUnit(u, dt) {
     u.attackCd = Math.max(0, u.attackCd - dt);
     u.moveCd = Math.max(0, u.moveCd - dt);
+    if (u.stunUntil > this.time) return; // 行動不能
     if (u.castLock > 0) {
       u.castLock = Math.max(0, u.castLock - dt);
       return;
@@ -249,7 +279,7 @@ export class BattleEngine {
   }
 
   _basicAttack(u, target) {
-    u.attackCd = 1 / u.attackSpeed;
+    u.attackCd = 1 / this.effectiveAttackSpeed(u);
     const dmg = this.effectiveAtk(u);
     const ranged = u.range > 1;
 
@@ -259,7 +289,7 @@ export class BattleEngine {
   }
 
   _gainMana(u, amount) {
-    if (!u.alive) return;
+    if (!u.alive || u.manaLockUntil > this.time) return;
     const before = u.mana;
     u.mana = Math.min(u.manaMax, u.mana + amount);
     if (before < u.manaMax && u.mana >= u.manaMax) {
@@ -328,6 +358,56 @@ export class BattleEngine {
     this.onEvent("shield", { unit: u, amount: value });
   }
 
+  /** 行動不能にする */
+  _stun(u, duration) {
+    if (!u.alive) return;
+    u.stunUntil = Math.max(u.stunUntil, this.time + duration);
+    this.onEvent("stun", { unit: u, duration });
+  }
+
+  /**
+   * 戦闘中にユニットを増やす（召喚）。
+   * 見た目は "spawn" イベントを受けた側が作る。
+   */
+  summon(owner, typeId, tile) {
+    const u = createUnit({
+      typeId,
+      team: owner.team,
+      tile,
+      star: owner.star,
+    });
+    u.summoned = true;
+    u.ownerUid = owner.uid;
+    this.units.push(u);
+    this.onEvent("spawn", { unit: u, owner });
+    return u;
+  }
+
+  /** 指定マスの周囲で空いているマスを探す */
+  freeTileNear(tile, { maxRing = 2 } = {}) {
+    const occ = this.occupancy();
+    for (let ring = 1; ring <= maxRing; ring++) {
+      for (let dc = -ring; dc <= ring; dc++) {
+        for (let dr = -ring; dr <= ring; dr++) {
+          if (Math.max(Math.abs(dc), Math.abs(dr)) !== ring) continue;
+          const c = tile.c + dc;
+          const r = tile.r + dr;
+          if (c < 0 || c > 7 || r < 0 || r > 7) continue;
+          if (!occ.has(key(c, r))) return { c, r };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** HPの割合が低い順に並べたユニット */
+  lowestHp(team, count = 1) {
+    return this.units
+      .filter((u) => u.alive && u.team === team)
+      .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)
+      .slice(0, count);
+  }
+
   _kill(u, source) {
     if (!u.alive) return;
     u.alive = false;
@@ -360,6 +440,7 @@ export class BattleEngine {
   _castSkill(u, target) {
     u.mana = 0;
     u.castLock = CAST_LOCK;
+    u.manaLockUntil = this.time + MANA_LOCK;
     u.attackCd = Math.max(u.attackCd, CAST_LOCK);
     const skill = u.def.skill;
     this.onEvent("skill", { unit: u, name: skill.name, target });
@@ -492,6 +573,204 @@ const SKILLS = {
       engine._heal(o, 220 * u.spellPower);
       o.buffs.push({ stat: "atkMul", value: 0.25, until: engine.time + 8 });
       engine.onEvent("buffPulse", { unit: o, color: 0x8affc0, text: "鼓舞" });
+    }
+  },
+
+  // ------------------------------------------------------------ RPGジョブ
+
+  /** なぎ払い: 隣接する敵全員を薙ぐ */
+  warrior(engine, u) {
+    const dmg = engine.effectiveAtk(u) * 1.7;
+    engine.onEvent("impact", { tile: u.tile, color: 0xffc073, radius: 2.0 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      if (chebyshev(o.tile, u.tile) <= 1) {
+        engine._applyDamage(o, dmg, DamageType.PHYSICAL, u, { delay: 0.12 });
+      }
+    }
+  },
+
+  /** 聖なる誓い: 自分と隣接味方にシールド、自分は防御アップ */
+  paladin(engine, u) {
+    const shield = 320 * u.spellPower;
+    engine._addShield(u, shield, 8);
+    u.buffs.push({ stat: "armor", value: 40, until: engine.time + 8 });
+    engine.onEvent("buffPulse", { unit: u, color: 0xffe9a8, text: "誓い" });
+    for (const o of engine.units) {
+      if (!o.alive || o.team !== u.team || o === u) continue;
+      if (chebyshev(o.tile, u.tile) <= 1) {
+        engine._addShield(o, shield, 8);
+        engine.onEvent("buffPulse", { unit: o, color: 0xffe9a8 });
+      }
+    }
+    engine.onEvent("impact", { tile: u.tile, color: 0xffe9a8, radius: 2.2 });
+  },
+
+  /** 三連射: 同じ相手に3回 */
+  archer(engine, u, target) {
+    const dmg = engine.effectiveAtk(u) * 0.85;
+    for (let i = 0; i < 3; i++) {
+      engine._applyDamage(target, dmg, DamageType.PHYSICAL, u, {
+        delay: 0.1 + i * 0.14,
+      });
+      engine.onEvent("arrow", { unit: u, target, delay: i * 0.14 });
+    }
+  },
+
+  /** 癒しの光: HP割合が低い味方2体を回復 */
+  cleric(engine, u) {
+    const targets = engine.lowestHp(u.team, 2);
+    for (const o of targets) {
+      engine._heal(o, 390 * u.spellPower);
+      o.buffs.push({ stat: "armor", value: 20, until: engine.time + 6 });
+      engine.onEvent("buffPulse", { unit: o, color: 0x8affc0, text: "回復" });
+    }
+    engine.onEvent("impact", { tile: u.tile, color: 0x8affc0, radius: 1.6 });
+  },
+
+  /** メテオ: 対象中心 5x5 */
+  wizard(engine, u, target) {
+    const dmg = 320 * u.spellPower;
+    engine.onEvent("impact", { tile: target.tile, color: 0xff8a5c, radius: 3.4 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      if (chebyshev(o.tile, target.tile) <= 2) {
+        engine._applyDamage(o, dmg, DamageType.MAGIC, u, { delay: 0.3 });
+      }
+    }
+  },
+
+  /** 急所突き: 単体大ダメージ＋自分の攻撃速度アップ */
+  thief(engine, u, target) {
+    engine._applyDamage(target, engine.effectiveAtk(u) * 2.4, DamageType.PHYSICAL, u, {
+      delay: 0.1,
+    });
+    u.buffs.push({ stat: "asMul", value: 0.7, until: engine.time + 4 });
+    engine.onEvent("buffPulse", { unit: u, color: 0xc0ffd0, text: "疾風" });
+  },
+
+  /** ジャンプ: 最も遠い敵の隣に落ちて周囲を巻き込む */
+  dragoon(engine, u) {
+    const enemies = engine.units.filter((o) => o.alive && o.team !== u.team);
+    if (!enemies.length) return;
+    const victim = enemies.reduce((a, b) =>
+      chebyshev(b.tile, u.tile) > chebyshev(a.tile, u.tile) ? b : a,
+    );
+
+    const spot = engine.freeTileNear(victim.tile, { maxRing: 2 });
+    if (spot) {
+      const from = { ...u.tile };
+      u.tile = spot;
+      u.targetUid = victim.uid;
+      u.moveCd = u.moveInterval;
+      engine.onEvent("leap", { unit: u, from, to: { ...spot }, high: true });
+    }
+
+    const main = engine.effectiveAtk(u) * 2.3;
+    const splash = engine.effectiveAtk(u) * 1.1;
+    engine.onEvent("impact", { tile: victim.tile, color: 0x9ad8ff, radius: 2.2 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      const d = chebyshev(o.tile, victim.tile);
+      if (o === victim) {
+        engine._applyDamage(o, main, DamageType.PHYSICAL, u, { delay: 0.34 });
+      } else if (d <= 1) {
+        engine._applyDamage(o, splash, DamageType.PHYSICAL, u, { delay: 0.34 });
+      }
+    }
+  },
+
+  /** 影縫い: 単体ダメージ＋行動不能 */
+  ninja(engine, u, target) {
+    engine._applyDamage(target, engine.effectiveAtk(u) * 2.0, DamageType.PHYSICAL, u, {
+      delay: 0.1,
+    });
+    engine._stun(target, 2.5);
+    engine.onEvent("impact", { tile: target.tile, color: 0xb08aff, radius: 1.2 });
+  },
+
+  /** 猛進: 攻撃力と攻撃速度を大幅強化 */
+  berserker(engine, u) {
+    u.buffs.push({ stat: "atkMul", value: 0.55, until: engine.time + 8 });
+    u.buffs.push({ stat: "asMul", value: 0.35, until: engine.time + 8 });
+    engine.onEvent("buffPulse", { unit: u, color: 0xff7a6a, text: "猛進!" });
+    engine.onEvent("impact", { tile: u.tile, color: 0xff7a6a, radius: 1.8 });
+  },
+
+  /** ヘッドショット: 射程無視で瀕死の敵を撃つ */
+  sniper(engine, u) {
+    const enemies = engine.units.filter((o) => o.alive && o.team !== u.team);
+    if (!enemies.length) return;
+    const victim = enemies.reduce((a, b) =>
+      b.hp / b.maxHp < a.hp / a.maxHp ? b : a,
+    );
+    engine.onEvent("snipe", { unit: u, target: victim });
+    engine._applyDamage(victim, engine.effectiveAtk(u) * 3.6, DamageType.PHYSICAL, u, {
+      delay: 0.26,
+    });
+  },
+
+  /** 魔物召喚: ゴーレムを呼ぶ（同時に2体まで。上限なら回復して立て直す） */
+  summoner(engine, u) {
+    const mine = engine.units.filter(
+      (o) => o.alive && o.summoned && o.ownerUid === u.uid,
+    );
+    if (mine.length >= 2) {
+      for (const o of mine) {
+        engine._heal(o, 300 * u.spellPower);
+        engine.onEvent("buffPulse", { unit: o, color: 0xb98aff, text: "修復" });
+      }
+      return;
+    }
+    const spot = engine.freeTileNear(u.tile, { maxRing: 2 });
+    if (!spot) return;
+    engine.summon(u, "golem", spot);
+    engine.onEvent("impact", { tile: spot, color: 0xb98aff, radius: 1.6 });
+  },
+
+  /** 戦いの歌: 味方全体の攻撃速度とマナ */
+  bard(engine, u) {
+    engine.onEvent("impact", { tile: u.tile, color: 0x9ad8ff, radius: 3.2 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team !== u.team) continue;
+      o.buffs.push({ stat: "asMul", value: 0.4, until: engine.time + 8 });
+      if (o !== u) engine._gainMana(o, 20); // 自分に還すと連射できてしまう
+      engine.onEvent("buffPulse", { unit: o, color: 0x9ad8ff, text: "♪" });
+    }
+  },
+
+  /** 氷結: 範囲ダメージ＋攻撃速度低下 */
+  icemage(engine, u, target) {
+    const dmg = 220 * u.spellPower;
+    engine.onEvent("impact", { tile: target.tile, color: 0x8ee8ff, radius: 2.0 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      if (chebyshev(o.tile, target.tile) <= 1) {
+        engine._applyDamage(o, dmg, DamageType.MAGIC, u, { delay: 0.2 });
+        o.buffs.push({ stat: "asMul", value: -0.45, until: engine.time + 5 });
+        engine.onEvent("buffPulse", { unit: o, color: 0x8ee8ff, text: "凍結" });
+      }
+    }
+  },
+
+  /** 串刺し: 対象とその奥の敵を貫く */
+  guardian(engine, u, target) {
+    const dc = Math.sign(target.tile.c - u.tile.c);
+    const dr = Math.sign(target.tile.r - u.tile.r);
+    const dmg = engine.effectiveAtk(u) * 1.9;
+
+    const hit = [target];
+    for (let i = 1; i <= 2; i++) {
+      const c = target.tile.c + dc * i;
+      const r = target.tile.r + dr * i;
+      const o = engine.units.find(
+        (x) => x.alive && x.team !== u.team && x.tile.c === c && x.tile.r === r,
+      );
+      if (o) hit.push(o);
+    }
+    engine.onEvent("thrust", { unit: u, target, dir: { dc, dr } });
+    for (const o of hit) {
+      engine._applyDamage(o, dmg, DamageType.PHYSICAL, u, { delay: 0.16 });
     }
   },
 };

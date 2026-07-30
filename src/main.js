@@ -195,7 +195,8 @@ function handleEvent(type, p) {
     case "move": {
       const v = viewOf(p.unit);
       if (!v) break;
-      const isLeap = p.unit.typeId === "knight";
+      // 跳躍系の移動パターンは大きく弧を描く
+      const isLeap = p.unit.def.move.kind === "jump";
       v.moveTo(p.from, p.to, {
         arc: isLeap ? 0.55 : 0.16,
         duration: Math.min(0.34, p.unit.moveInterval * 0.6),
@@ -205,7 +206,10 @@ function handleEvent(type, p) {
 
     case "leap": {
       const v = viewOf(p.unit);
-      v?.moveTo(p.from, p.to, { arc: 1.1, duration: 0.34 });
+      v?.moveTo(p.from, p.to, {
+        arc: p.high ? 1.8 : 1.1,
+        duration: p.high ? 0.46 : 0.34,
+      });
       break;
     }
 
@@ -287,6 +291,57 @@ function handleEvent(type, p) {
     case "buffPulse": {
       const v = viewOf(p.unit);
       v?.pulse(p.color);
+      break;
+    }
+
+    // 召喚でユニットが増えた
+    case "spawn": {
+      const view = new UnitView(p.unit, stage.unitLayer);
+      views.set(p.unit.uid, view);
+      effects.impact(p.unit.tile, 0xb98aff, 1.4);
+      hud.log(`${p.owner.team === "player" ? '<b class="ally">' : '<b class="enemy">'}${p.owner.def.name}</b> が <em>${p.unit.def.name}</em> を召喚`);
+      break;
+    }
+
+    // 行動不能
+    case "stun": {
+      const v = viewOf(p.unit);
+      if (v) {
+        v.pulse(0xb08aff);
+        effects.floatingText(headPos(p.unit, 0.5), "スタン", "#c9a8ff", {
+          scale: 0.44,
+          rise: 0.5,
+          life: 0.9,
+        });
+      }
+      break;
+    }
+
+    // 弓兵の追加の矢
+    case "arrow": {
+      const v = viewOf(p.unit);
+      if (!v) break;
+      const from = v.worldPos(v.muzzleHeight);
+      const to = headPos(p.target, 0);
+      effects.after(p.delay ?? 0, () => effects.projectile(from, to, 0xffe6a8, { duration: 0.14 }));
+      break;
+    }
+
+    // 狙撃手の一撃（射線を引く）
+    case "snipe": {
+      const v = viewOf(p.unit);
+      if (!v) break;
+      v.faceTile(p.target.tile);
+      effects.tracer(v.worldPos(v.muzzleHeight), headPos(p.target, 0), 0xffd08a);
+      break;
+    }
+
+    // 重装兵の突き（貫通ライン）
+    case "thrust": {
+      const v = viewOf(p.unit);
+      if (!v) break;
+      v.lunge(p.target.tile);
+      effects.impact(p.target.tile, 0xdfe8ff, 1.6);
       break;
     }
 
@@ -470,4 +525,13 @@ function showTitleDiorama() {
 boot();
 
 // デバッグ用に覗けるようにしておく
-Object.assign(window, { __game: game, __stage: stage, __THREE: THREE, __units: UNIT_TYPES });
+Object.assign(window, {
+  __game: game,
+  __stage: stage,
+  __THREE: THREE,
+  __units: UNIT_TYPES,
+  __views: views,
+  __createUnit: createUnit,
+  __UnitView: UnitView,
+  __clearBoard: clearBoard,
+});

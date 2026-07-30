@@ -283,7 +283,7 @@ html, body {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .overlay__panel {
-  width: min(920px, 94vw);
+  width: min(1180px, 95vw);
   max-height: 88vh;
   overflow-y: auto;
   background: linear-gradient(160deg, #161d33, #0d1122);
@@ -316,21 +316,17 @@ html, body {
 /* ユニット選択カード */
 .roster {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
-/* 編成選択の6枚は 3×2 に揃える（自動計算だと 5+1 になって落ち着かない） */
-@media (min-width: 700px) {
-  .roster--pick { grid-template-columns: repeat(3, 1fr); }
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
 }
 .card {
   position: relative;
   text-align: left;
   background: rgba(255, 255, 255, 0.05);
   border: 1.5px solid var(--line);
-  border-radius: 14px;
-  padding: 14px;
+  border-radius: 12px;
+  padding: 11px;
   cursor: pointer;
   color: inherit;
   font-family: inherit;
@@ -357,9 +353,9 @@ html, body {
   display: grid;
   place-items: center;
 }
-.card__glyph { font-size: 30px; line-height: 1; }
-.card__name { font-weight: 700; margin-top: 6px; font-size: 15px; }
-.card__role { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+.card__glyph { font-size: 26px; line-height: 1.1; height: 30px; }
+.card__name { font-weight: 700; margin-top: 4px; font-size: 14px; }
+.card__role { font-size: 10.5px; color: var(--muted); letter-spacing: 0.06em; }
 .card__bars { margin-top: 10px; display: grid; gap: 4px; }
 .bar { display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 6px; font-size: 9px; color: var(--muted); }
 .bar__track {
@@ -373,8 +369,23 @@ html, body {
 .bar__fill--hp { background: linear-gradient(90deg, #4ade80, #22c55e); }
 .bar__fill--atk { background: linear-gradient(90deg, #fb923c, #ef4444); }
 .bar__fill--rng { background: linear-gradient(90deg, #60a5fa, #818cf8); }
-.card__skill { margin-top: 10px; font-size: 11px; line-height: 1.5; color: #b9c5dd; }
-.card__skill b { color: var(--gold); display: block; font-size: 11.5px; }
+.card__skill {
+  margin-top: 8px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: #b9c5dd;
+  /* 20体ぶん並ぶので説明は3行までに抑える（全文は title 属性で出る） */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card__skill b {
+  color: var(--gold);
+  display: block;
+  font-size: 11px;
+  -webkit-line-clamp: none;
+}
 
 .overlay__actions {
   margin-top: 26px;

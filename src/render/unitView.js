@@ -12,7 +12,12 @@ const BAR_H = 52;
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-function teamMaterials(team) {
+/**
+ * 陣営ごとのマテリアル。
+ * ジョブ系はローポリなので flatShading で面を立たせる。
+ */
+function teamMaterials(team, lowPoly = false) {
+  const flat = lowPoly;
   if (team === "player") {
     return {
       body: new THREE.MeshStandardMaterial({
@@ -21,12 +26,14 @@ function teamMaterials(team) {
         metalness: 0.22,
         emissive: new THREE.Color(0x0d2436),
         emissiveIntensity: 1,
+        flatShading: flat,
       }),
       accent: new THREE.MeshStandardMaterial({
         color: 0x7fdcff,
         roughness: 0.2,
         metalness: 0.65,
         emissive: new THREE.Color(0x1c5f80),
+        flatShading: flat,
       }),
     };
   }
@@ -37,12 +44,14 @@ function teamMaterials(team) {
       metalness: 0.42,
       emissive: new THREE.Color(0x2a0d12),
       emissiveIntensity: 1,
+      flatShading: flat,
     }),
     accent: new THREE.MeshStandardMaterial({
       color: 0xff9a9a,
       roughness: 0.22,
       metalness: 0.6,
       emissive: new THREE.Color(0x6b1e1e),
+      flatShading: flat,
     }),
   };
 }
@@ -64,7 +73,7 @@ export class UnitView {
     this.basePos = worldOf(unit.tile);
     this.group.position.copy(this.basePos);
 
-    this.materials = teamMaterials(unit.team);
+    this.materials = teamMaterials(unit.team, unit.def.family === "job");
     this.model = createPieceModel(unit.typeId, this.materials);
     // 相手陣を向かせる
     this.model.rotation.y = unit.team === "player" ? 0 : Math.PI;

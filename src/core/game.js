@@ -21,32 +21,32 @@ export const START_LIFE = 3;
 /** 序盤6ラウンドの固定編成。以降は自動生成する */
 const ENEMY_SCRIPT = [
   {
-    comp: ["pawn", "pawn", "pawn", "rook", "bishop"],
+    comp: ["pawn", "pawn", "warrior", "rook", "archer"],
     power: 0.78,
     name: "農民兵団",
   },
   {
-    comp: ["pawn", "pawn", "knight", "knight", "bishop"],
+    comp: ["thief", "archer", "knight", "warrior", "cleric"],
     power: 0.9,
     name: "斥候隊",
   },
   {
-    comp: ["rook", "rook", "pawn", "bishop", "knight"],
+    comp: ["paladin", "guardian", "rook", "bishop", "cleric"],
     power: 1.0,
     name: "城塞守備隊",
   },
   {
-    comp: ["knight", "knight", "pawn", "queen", "king"],
+    comp: ["knight", "dragoon", "warrior", "queen", "king"],
     power: 1.1,
     name: "王家の騎兵",
   },
   {
-    comp: ["bishop", "bishop", "rook", "queen", "pawn"],
+    comp: ["wizard", "icemage", "bishop", "sniper", "guardian"],
     power: 1.2,
     name: "魔導砲兵",
   },
   {
-    comp: ["king", "rook", "queen", "bishop", "knight"],
+    comp: ["king", "paladin", "queen", "ninja", "berserker"],
     power: 1.32,
     name: "黒王の親衛隊",
   },

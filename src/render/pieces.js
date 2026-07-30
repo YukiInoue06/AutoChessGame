@@ -214,6 +214,338 @@ const sharedGeo = {
   },
 };
 
+
+// ============================================================ RPGジョブ（ローポリ）
+
+/**
+ * ジョブ系ユニットの素体。低ポリゴンの人型で、
+ * 頭・胴・肩・腰と台座だけを持つ。あとは職ごとの装備を足していく。
+ */
+function figure(g, { body, accent }, { skirt = 0.26, cape = false } = {}) {
+  addMesh(g, new THREE.CylinderGeometry(0.3, 0.33, 0.07, 6), body, { y: 0.035 });
+  addMesh(g, new THREE.CylinderGeometry(0.17, 0.27, skirt, 6), body, {
+    y: 0.07 + skirt / 2,
+  });
+  const waist = 0.07 + skirt;
+  addMesh(g, new THREE.BoxGeometry(0.29, 0.05, 0.22), accent, { y: waist + 0.02 });
+  addMesh(g, new THREE.BoxGeometry(0.3, 0.26, 0.2), body, { y: waist + 0.17 });
+
+  // 腕。武器を持たせたときに宙に浮かず、体と繋がって見える
+  for (const sx of [-1, 1]) {
+    addMesh(g, new THREE.BoxGeometry(0.08, 0.25, 0.1), body, {
+      x: sx * 0.195,
+      y: waist + 0.15,
+      rz: sx * 0.1,
+    });
+  }
+
+  addMesh(g, new THREE.BoxGeometry(0.4, 0.09, 0.22), accent, { y: waist + 0.32 });
+  addMesh(g, new THREE.BoxGeometry(0.1, 0.05, 0.1), accent, { y: waist + 0.39 });
+  addMesh(g, new THREE.DodecahedronGeometry(0.115), body, { y: waist + 0.48 });
+
+  if (cape) {
+    addMesh(g, new THREE.BoxGeometry(0.3, 0.4, 0.04), accent, {
+      y: waist + 0.14,
+      z: -0.13,
+      rx: 0.1,
+    });
+  }
+  return { headY: waist + 0.48, shoulderY: waist + 0.32, handY: waist + 0.12 };
+}
+
+// --- 装備パーツ ---
+
+/** 片手剣（右手） */
+function sword(g, mats, { x = 0.24, y = 0.5, tilt = -0.35, len = 0.32 } = {}) {
+  addMesh(g, new THREE.BoxGeometry(0.045, len, 0.02), mats.accent, {
+    x,
+    y: y + len / 2,
+    rz: tilt,
+  });
+  addMesh(g, new THREE.BoxGeometry(0.13, 0.03, 0.045), mats.body, { x, y, rz: tilt });
+  addMesh(g, new THREE.BoxGeometry(0.035, 0.1, 0.035), mats.body, {
+    x: x + Math.sin(tilt) * 0.06,
+    y: y - 0.05,
+    rz: tilt,
+  });
+}
+
+/** 盾（左手） */
+function shield(g, mats, { x = -0.25, y = 0.5 } = {}) {
+  addMesh(g, new THREE.BoxGeometry(0.04, 0.27, 0.21), mats.accent, { x, y });
+  addMesh(g, new THREE.OctahedronGeometry(0.055), mats.body, { x: x - 0.03, y });
+}
+
+/** 長柄武器 */
+function polearm(g, mats, { x = 0.24, y = 0.15, len = 0.72, tip = "cone" } = {}) {
+  addMesh(g, new THREE.CylinderGeometry(0.021, 0.021, len, 6), mats.body, {
+    x,
+    y: y + len / 2,
+  });
+  const top = y + len;
+  if (tip === "cone") {
+    addMesh(g, new THREE.ConeGeometry(0.05, 0.14, 5), mats.accent, { x, y: top + 0.06 });
+  } else {
+    addMesh(g, new THREE.BoxGeometry(0.04, 0.19, 0.16), mats.accent, {
+      x,
+      y: top - 0.05,
+      z: 0.07,
+    });
+  }
+}
+
+/** 杖 */
+function staff(g, mats, { x = 0.23, y = 0.12, len = 0.62, orb = 0.062 } = {}) {
+  addMesh(g, new THREE.CylinderGeometry(0.02, 0.02, len, 6), mats.body, {
+    x,
+    y: y + len / 2,
+  });
+  addMesh(g, new THREE.IcosahedronGeometry(orb), mats.accent, { x, y: y + len + 0.05 });
+}
+
+/** 弓 */
+function bow(g, mats, { x = 0.25, y = 0.52 } = {}) {
+  addMesh(g, new THREE.TorusGeometry(0.16, 0.018, 5, 9, Math.PI * 1.15), mats.body, {
+    x,
+    y,
+    ry: Math.PI / 2,
+    rz: Math.PI / 2 - 0.3,
+  });
+  addMesh(g, new THREE.BoxGeometry(0.006, 0.3, 0.006), mats.accent, { x: x - 0.02, y });
+}
+
+/** フード・とんがり帽子 */
+function hood(g, mats, { y, r = 0.15, h = 0.22, useAccent = true } = {}) {
+  addMesh(g, new THREE.ConeGeometry(r, h, 6), useAccent ? mats.accent : mats.body, {
+    y: y + h / 2 - 0.04,
+  });
+}
+
+/** 兜 */
+function helm(g, mats, { y, crest = false } = {}) {
+  addMesh(g, new THREE.CylinderGeometry(0.113, 0.125, 0.1, 6), mats.accent, { y: y + 0.03 });
+  if (crest) {
+    addMesh(g, new THREE.BoxGeometry(0.03, 0.13, 0.17), mats.accent, { y: y + 0.13 });
+  }
+}
+
+/** 2本の角 */
+function horns(g, mats, { y }) {
+  for (const sx of [-1, 1]) {
+    addMesh(g, new THREE.ConeGeometry(0.035, 0.15, 4), mats.accent, {
+      x: sx * 0.085,
+      y: y + 0.09,
+      rz: sx * 0.5,
+    });
+  }
+}
+
+/** ジョブごとのモデル定義 */
+const JOB_BUILDERS = {
+  warrior(g, m) {
+    const f = figure(g, m);
+    helm(g, m, { y: f.headY, crest: true });
+    sword(g, m, { y: 0.48 });
+    shield(g, m, { y: 0.48 });
+  },
+
+  paladin(g, m) {
+    const f = figure(g, m, { skirt: 0.3, cape: true });
+    helm(g, m, { y: f.headY, crest: true });
+    shield(g, m, { x: -0.26, y: 0.52 });
+    // 大剣を垂直に構える
+    addMesh(g, new THREE.BoxGeometry(0.055, 0.46, 0.025), m.accent, { x: 0.25, y: 0.64 });
+    addMesh(g, new THREE.BoxGeometry(0.17, 0.035, 0.05), m.body, { x: 0.25, y: 0.41 });
+  },
+
+  archer(g, m) {
+    const f = figure(g, m, { skirt: 0.24 });
+    hood(g, m, { y: f.headY, r: 0.14, h: 0.2 });
+    bow(g, m, { y: 0.54 });
+    // 背中の矢筒
+    addMesh(g, new THREE.CylinderGeometry(0.055, 0.05, 0.2, 6), m.accent, {
+      y: 0.56,
+      z: -0.15,
+      rx: 0.35,
+    });
+  },
+
+  cleric(g, m) {
+    const f = figure(g, m, { skirt: 0.32 });
+    hood(g, m, { y: f.headY, r: 0.145, h: 0.19 });
+    staff(g, m, { x: 0.22, y: 0.1, len: 0.6, orb: 0 });
+    // 杖の先の十字
+    addMesh(g, new THREE.BoxGeometry(0.035, 0.15, 0.035), m.accent, { x: 0.22, y: 0.76 });
+    addMesh(g, new THREE.BoxGeometry(0.12, 0.035, 0.035), m.accent, { x: 0.22, y: 0.79 });
+  },
+
+  wizard(g, m) {
+    const f = figure(g, m, { skirt: 0.34 });
+    hood(g, m, { y: f.headY, r: 0.17, h: 0.3 });
+    staff(g, m, { x: 0.23, y: 0.1, len: 0.66, orb: 0.075 });
+  },
+
+  thief(g, m) {
+    const f = figure(g, m, { skirt: 0.22 });
+    hood(g, m, { y: f.headY, r: 0.135, h: 0.18 });
+    // 短剣を左右に
+    for (const sx of [-1, 1]) {
+      addMesh(g, new THREE.BoxGeometry(0.035, 0.19, 0.018), m.accent, {
+        x: sx * 0.23,
+        y: 0.5,
+        rz: sx * 0.55,
+      });
+    }
+  },
+
+  dragoon(g, m) {
+    const f = figure(g, m, { skirt: 0.28, cape: true });
+    helm(g, m, { y: f.headY });
+    horns(g, m, { y: f.headY });
+    polearm(g, m, { x: 0.25, y: 0.12, len: 0.78 });
+  },
+
+  ninja(g, m) {
+    const f = figure(g, m, { skirt: 0.22 });
+    // 覆面
+    addMesh(g, new THREE.BoxGeometry(0.19, 0.07, 0.19), m.accent, { y: f.headY - 0.01 });
+    addMesh(g, new THREE.BoxGeometry(0.05, 0.06, 0.3), m.accent, {
+      y: f.headY + 0.02,
+      z: -0.12,
+      rx: -0.5,
+    });
+    // 背中の直刀
+    addMesh(g, new THREE.BoxGeometry(0.03, 0.4, 0.02), m.accent, {
+      y: 0.6,
+      z: -0.13,
+      rz: 0.45,
+    });
+  },
+
+  berserker(g, m) {
+    const f = figure(g, m, { skirt: 0.26 });
+    horns(g, m, { y: f.headY });
+    // 両手斧
+    addMesh(g, new THREE.CylinderGeometry(0.024, 0.024, 0.5, 6), m.body, {
+      x: 0.26,
+      y: 0.42,
+      rz: -0.2,
+    });
+    addMesh(g, new THREE.BoxGeometry(0.05, 0.22, 0.19), m.accent, { x: 0.33, y: 0.66 });
+  },
+
+  sniper(g, m) {
+    const f = figure(g, m, { skirt: 0.24 });
+    // つばの広い帽子
+    addMesh(g, new THREE.CylinderGeometry(0.19, 0.19, 0.02, 8), m.accent, {
+      y: f.headY + 0.05,
+    });
+    addMesh(g, new THREE.CylinderGeometry(0.09, 0.1, 0.1, 6), m.accent, {
+      y: f.headY + 0.1,
+    });
+    // 長い銃
+    addMesh(g, new THREE.BoxGeometry(0.045, 0.05, 0.52), m.accent, {
+      x: 0.2,
+      y: 0.54,
+      rx: -0.12,
+    });
+    addMesh(g, new THREE.CylinderGeometry(0.022, 0.022, 0.09, 6), m.body, {
+      x: 0.2,
+      y: 0.6,
+      z: 0.02,
+      rx: Math.PI / 2,
+    });
+  },
+
+  summoner(g, m) {
+    const f = figure(g, m, { skirt: 0.34, cape: true });
+    hood(g, m, { y: f.headY, r: 0.16, h: 0.24 });
+    // 浮遊する魔法陣＋核
+    addMesh(g, new THREE.TorusGeometry(0.11, 0.016, 5, 10), m.accent, {
+      x: 0.26,
+      y: 0.66,
+      rx: Math.PI / 2,
+    });
+    addMesh(g, new THREE.IcosahedronGeometry(0.055), m.accent, { x: 0.26, y: 0.66 });
+  },
+
+  bard(g, m) {
+    const f = figure(g, m, { skirt: 0.26 });
+    // 羽根つき帽子
+    addMesh(g, new THREE.CylinderGeometry(0.13, 0.14, 0.08, 6), m.accent, {
+      y: f.headY + 0.06,
+    });
+    addMesh(g, new THREE.ConeGeometry(0.025, 0.22, 4), m.accent, {
+      x: 0.08,
+      y: f.headY + 0.16,
+      rz: -0.7,
+    });
+    // リュート
+    addMesh(g, new THREE.BoxGeometry(0.17, 0.2, 0.06), m.accent, {
+      x: 0.16,
+      y: 0.48,
+      rz: 0.3,
+    });
+    addMesh(g, new THREE.BoxGeometry(0.035, 0.26, 0.035), m.body, {
+      x: 0.27,
+      y: 0.63,
+      rz: 0.3,
+    });
+  },
+
+  icemage(g, m) {
+    const f = figure(g, m, { skirt: 0.32 });
+    hood(g, m, { y: f.headY, r: 0.16, h: 0.26 });
+    staff(g, m, { x: 0.23, y: 0.1, len: 0.6, orb: 0 });
+    // 杖の先の氷晶（八面体を3つ）
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      addMesh(g, new THREE.OctahedronGeometry(0.045), m.accent, {
+        x: 0.23 + Math.cos(a) * 0.045,
+        y: 0.74 + Math.sin(a) * 0.045,
+        z: Math.sin(a) * 0.03,
+      });
+    }
+  },
+
+  guardian(g, m) {
+    const f = figure(g, m, { skirt: 0.3 });
+    helm(g, m, { y: f.headY });
+    // 面覆い
+    addMesh(g, new THREE.BoxGeometry(0.12, 0.06, 0.05), m.accent, {
+      y: f.headY - 0.02,
+      z: 0.09,
+    });
+    polearm(g, m, { x: 0.26, y: 0.1, len: 0.8, tip: "axe" });
+    // 大型の盾
+    addMesh(g, new THREE.BoxGeometry(0.05, 0.32, 0.23), m.accent, { x: -0.27, y: 0.47 });
+  },
+
+  golem(g, m) {
+    // 人型だが石の塊。手足が太い
+    addMesh(g, new THREE.CylinderGeometry(0.31, 0.34, 0.08, 6), m.body, { y: 0.04 });
+    addMesh(g, new THREE.BoxGeometry(0.3, 0.24, 0.24), m.body, { y: 0.2 });
+    addMesh(g, new THREE.BoxGeometry(0.38, 0.3, 0.28), m.body, { y: 0.47 });
+    addMesh(g, new THREE.DodecahedronGeometry(0.12), m.accent, { y: 0.72 });
+    for (const sx of [-1, 1]) {
+      addMesh(g, new THREE.BoxGeometry(0.12, 0.34, 0.14), m.body, {
+        x: sx * 0.26,
+        y: 0.42,
+        rz: sx * 0.12,
+      });
+    }
+  },
+};
+
+/** ジョブ系のモデルを作る */
+function createJobModel(typeId, materials) {
+  const g = new THREE.Group();
+  JOB_BUILDERS[typeId](g, materials);
+  return g;
+}
+
+export const JOB_MODEL_IDS = Object.keys(JOB_BUILDERS);
+
 /**
  * コマの 3D モデルを生成する。
  * @param {string} typeId
@@ -221,6 +553,8 @@ const sharedGeo = {
  * @returns {THREE.Group} 原点が足元、+Z が正面
  */
 export function createPieceModel(typeId, materials) {
+  if (JOB_BUILDERS[typeId]) return createJobModel(typeId, materials);
+
   const g = new THREE.Group();
   const { body, accent } = materials;
 
@@ -272,6 +606,21 @@ export const PIECE_HEIGHT = {
   knight: 0.92,
   queen: 1.06,
   king: 1.18,
+  warrior: 1.0,
+  paladin: 1.1,
+  archer: 0.98,
+  cleric: 1.02,
+  wizard: 1.14,
+  thief: 0.9,
+  dragoon: 1.06,
+  ninja: 0.92,
+  berserker: 1.0,
+  sniper: 1.04,
+  summoner: 1.12,
+  bard: 1.02,
+  icemage: 1.1,
+  guardian: 1.06,
+  golem: 0.9,
 };
 
 export { sharedGeo };
