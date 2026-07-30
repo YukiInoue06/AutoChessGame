@@ -90,8 +90,28 @@ html, body {
 }
 .stat__value--life { color: var(--enemy); }
 .stat__value--gold { color: var(--gold); }
-.stat__value--cost { font-size: 16px; }
-.stat__value--cost[data-over="true"] { color: var(--enemy); }
+.stat__value--level { color: var(--ally); }
+
+/* 経験値バー */
+.xpbar {
+  display: block;
+  width: 46px;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.xpbar--wide { width: 100%; height: 7px; margin-top: 6px; }
+.xpbar__fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #5ad2ff, #7d5cff);
+  transition: width 0.25s ease;
+}
+.xpbar__fill[data-max="true"] { background: var(--gold); }
 
 .phase {
   pointer-events: auto;
@@ -200,7 +220,71 @@ html, body {
 }
 .toast[data-show="true"] { opacity: 1; transform: translate(-50%, 0); }
 
-/* ---------- 兵舎 ---------- */
+/* ---------- ショップ ---------- */
+.shop__bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.shop__levelHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.shop__levelHead b { font-size: 18px; color: var(--ally); }
+.shop__odds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.odds b { color: var(--gold); margin-right: 2px; }
+.odds--zero { opacity: 0.35; }
+.shop__buttons { display: flex; gap: 8px; }
+.btn__sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.75;
+  letter-spacing: 0;
+}
+
+/* 売り切れた枠 */
+.card--sold {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  border-style: dashed;
+  opacity: 0.4;
+  cursor: default;
+}
+.card--sold::before { display: none; }
+.card--sold:hover { transform: none; background: rgba(255, 255, 255, 0.05); }
+.card__soldTag { font-size: 12px; letter-spacing: 0.2em; color: var(--muted); }
+
+/* コストバッジは帯の色をコストに合わせる */
+.card__cost[data-tier="4"],
+.card__cost[data-tier="5"] {
+  background: rgba(199, 155, 255, 0.18);
+  border-color: rgba(199, 155, 255, 0.5);
+  color: #d9bcff;
+}
+
+.income--xp { margin-top: 6px; border-left-color: var(--ally); background: rgba(90, 210, 255, 0.08); }
+.result-hint { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+
+/* ---------- 兵舎（共通パーツ） ---------- */
 .shop__head {
   display: flex;
   align-items: flex-start;

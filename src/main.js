@@ -8,7 +8,7 @@ import { createStage, worldOf, COLORS } from "./render/scene.js";
 import { UnitView } from "./render/unitView.js";
 import { Effects } from "./render/effects.js";
 import { BattleEngine, createUnit } from "./core/battle.js";
-import { Game, Phase, SQUAD_SIZE } from "./core/game.js";
+import { Game, Phase } from "./core/game.js";
 import { DamageType, UNIT_TYPES } from "./core/units.js";
 import { PlacementController, isDeployTile } from "./input/placement.js";
 import { isBenchTile } from "./core/board.js";
@@ -257,7 +257,7 @@ function placeUnit(view, tile) {
   refreshPrepUI();
 }
 
-/** ゴールド・コスト表示とバトル開始ボタンの状態を更新する */
+/** ゴールド・レベル表示とバトル開始ボタンの状態を更新する */
 function refreshPrepUI() {
   hud.setStats(game);
   const fielded = game.squad.length;
@@ -267,7 +267,7 @@ function refreshPrepUI() {
     disabled: fielded === 0,
     hint:
       `次の相手は <b style="color:#ff6b6b">${wave?.name ?? "?"}</b>（★${wave?.star ?? 1}）／ ` +
-      `出撃 <b>${fielded}</b>/${SQUAD_SIZE}体・コスト <b>${game.deployCost}</b>/${game.deployLimit}` +
+      `出撃 <b>${fielded}</b>/${game.maxUnits}体（レベル${game.level}）` +
       (fielded === 0 ? ' — <b style="color:#ff6b6b">1体以上を盤に出そう</b>' : ""),
   });
 }
@@ -514,15 +514,13 @@ async function onBattleEnd(winner) {
   const res = await hud.showRoundResult({
     win,
     round: win ? game.round - 1 : game.round,
-    roster: game.roster,
     enemyName: wave.name,
     mvp,
     life: game.life,
     income,
     gold: game.gold,
+    level: game.level,
   });
-
-  if (res.upgradeId != null) game.upgrade(game.byId(res.upgradeId));
 
   busy = false;
   enterPrep();

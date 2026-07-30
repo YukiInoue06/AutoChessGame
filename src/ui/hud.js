@@ -13,7 +13,14 @@ import {
   buildStats,
   cssColorOf,
 } from "../core/units.js";
-import { Phase, SQUAD_SIZE, unlockRoundFor } from "../core/game.js";
+import {
+  Phase,
+  MAX_LEVEL,
+  REROLL_COST,
+  XP_BUY_COST,
+  XP_BUY_AMOUNT,
+  shopOddsFor,
+} from "../core/game.js";
 
 const $ = (id) => document.getElementById(id);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -33,7 +40,8 @@ export class Hud {
       life: $("statLife"),
       streak: $("statStreak"),
       gold: $("statGold"),
-      cost: $("statCost"),
+      level: $("statLevel"),
+      xp: $("statXp"),
       toast: $("toast"),
       btnShop: $("btnShop"),
       phaseBadge: $("phaseBadge"),
@@ -87,8 +95,10 @@ export class Hud {
     this.el.life.textContent = "♥".repeat(Math.max(0, game.life)) || "0";
     this.el.streak.textContent = game.streak;
     this.el.gold.textContent = game.gold;
-    this.el.cost.textContent = `${game.deployCost}/${game.deployLimit}`;
-    this.el.cost.dataset.over = game.deployCost > game.deployLimit ? "true" : "false";
+    this.el.level.textContent = game.level;
+    const need = game.xpToNext;
+    this.el.xp.style.width = need ? `${Math.min(100, (game.xp / need) * 100)}%` : "100%";
+    this.el.xp.dataset.max = need ? "false" : "true";
   }
 
   /** 短いメッセージを一瞬だけ出す（コスト上限に引っかかった時など） */
@@ -230,18 +240,18 @@ export class Hud {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <h1 class="title">AUTO CHESS ARENA</h1>
-        <p class="subtitle">${SQUAD_SIZE} vs ${SQUAD_SIZE} ・ チェス盤オートバトル</p>
+        <p class="subtitle">チェス盤オートバトル ・ 全20種</p>
         <p>
-          チェスのコマとRPGジョブ、全20種類から${SQUAD_SIZE}体えらんで盤に並べ、あとは見守るだけ。
+          ショップでユニットを雇い、盤に並べて、あとは見守るだけ。
           コマは<b>それぞれの動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
         </p>
         <h3>ルール</h3>
         <ol class="helplist">
-          <li><b>兵舎</b> — ゴールドでユニットを雇う（コスト1〜5）</li>
-          <li><b>準備</b> — 手前3列にドラッグで配置。<b>出撃コストの上限</b>があるので全員は出せない</li>
-          <li><b>控え</b> — 盤の手前の列が控え。ドラッグで出し入れできる</li>
-          <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち</li>
-          <li><b>成長</b> — 勝つたびに収入と★アップ、負けるとライフが1減る</li>
+          <li><b>ショップ</b> — 5枠の品揃えから雇う。リロールで引き直せる</li>
+          <li><b>レベル</b> — 盤に出せる人数＝レベル。経験値で上がり、高コストも出やすくなる</li>
+          <li><b>合成</b> — 同じユニットが3体そろうと自動で★アップ</li>
+          <li><b>準備</b> — 手前3列にドラッグで配置。控え列に置いた分は戦わない</li>
+          <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち。負けるとライフが1減る</li>
         </ol>
         <div class="overlay__actions">
           <span class="overlay__note">${best > 0 ? `自己ベスト: ラウンド ${best} 突破` : "初挑戦"}</span>
@@ -267,12 +277,13 @@ export class Hud {
         <li><b>右ドラッグ / ホイール</b> — カメラの回転とズーム</li>
         <li><kbd>Space</kbd> — バトル開始 / 速度切替</li>
       </ul>
-      <h3>ゴールドとコスト</h3>
+      <h3>ショップとレベル</h3>
       <ul class="helplist">
-        <li>ユニットには<b>コスト1〜5</b>があり、兵舎でゴールドを払って雇います</li>
-        <li>盤に出せるのは<b>コスト合計が上限以内</b>かつ${SQUAD_SIZE}体まで。上限はラウンドが進むと増えます</li>
-        <li>雇ったユニットは<b>控え</b>に置いておけます（コスト上限には数えません）</li>
-        <li>売ると払ったぶんのゴールドが戻ります（★のぶんも含む）</li>
+        <li>ショップの<b>5枠</b>はレベルに応じた確率で抽選されます。${REROLL_COST}Gで引き直し、ラウンドごとに無料で更新</li>
+        <li><b>盤に出せる人数＝レベル</b>。${XP_BUY_COST}Gで${XP_BUY_AMOUNT}exp買えるほか、ラウンドごとに自動で入ります</li>
+        <li>レベルが上がると<b>高コストのユニットが出やすく</b>なります（5コストはレベル7から）</li>
+        <li>同じユニットが<b>3体そろうと自動で★アップ</b>。★2が3体そろえば★3になります</li>
+        <li>控えに置いたユニットは戦闘に出ませんが、合成の数には入ります</li>
         <li>収入はラウンドごとに基本10G＋勝利4G＋連勝ボーナス（最大5G）</li>
       </ul>
       <h3>戦闘のしくみ</h3>
@@ -292,8 +303,9 @@ export class Hud {
   }
 
   /**
-   * 兵舎（購入・売却）。
-   * 所持ユニットと購入できるユニットを並べ、閉じるまで開いたまま操作できる。
+   * ショップ。
+   * 5枠の品揃えはレベルに応じた確率で抽選され、リロールで引き直せる。
+   * 同じユニットが3体そろうと自動で★アップ（合成）する。
    *
    * @param {object} game
    * @param {{onChange?: () => void, first?: boolean}} opts
@@ -304,7 +316,7 @@ export class Hud {
       const p = this._openOverlay(`
         <div class="shop__head">
           <div>
-            <h2>兵舎</h2>
+            <h2>ショップ</h2>
             <p class="shop__sub" id="shopSub"></p>
           </div>
           <div class="shop__wallet">
@@ -313,17 +325,30 @@ export class Hud {
           </div>
         </div>
 
-        <h3>所持ユニット — ★アップ / 売却</h3>
-        <div class="roster roster--owned" id="shopOwned"></div>
+        <div class="shop__bar">
+          <div class="shop__level">
+            <div class="shop__levelHead">
+              <span>レベル <b id="shopLevel">3</b></span>
+              <span id="shopXp"></span>
+            </div>
+            <span class="xpbar xpbar--wide"><span class="xpbar__fill" id="shopXpBar"></span></span>
+            <div class="shop__odds" id="shopOdds"></div>
+          </div>
+          <div class="shop__buttons">
+            <button class="btn btn--gold" data-act="xp">
+              経験値を買う <span class="btn__sub">${XP_BUY_COST}G で ${XP_BUY_AMOUNT}exp</span>
+            </button>
+            <button class="btn" data-act="reroll">
+              リロール <span class="btn__sub">${REROLL_COST}G</span>
+            </button>
+          </div>
+        </div>
 
-        <p class="shop__hint">
-          コストが高いユニットは進行に応じて解禁されます（コスト3はR2、4はR4、5はR6から）。
-          ★アップすると出撃コストも1増えます。
-        </p>
-        <h3>雇う — チェスのコマ</h3>
-        <div class="roster" id="shopChess"></div>
-        <h3>雇う — RPGジョブ</h3>
-        <div class="roster" id="shopJob"></div>
+        <h3>品揃え — クリックで購入</h3>
+        <div class="roster roster--shop" id="shopSlots"></div>
+
+        <h3>所持ユニット</h3>
+        <div class="roster roster--owned" id="shopOwned"></div>
 
         <div class="overlay__actions">
           <span class="overlay__note" id="shopNote"></span>
@@ -333,74 +358,74 @@ export class Hud {
         </div>
       `);
 
+      const slots = p.querySelector("#shopSlots");
       const owned = p.querySelector("#shopOwned");
-      const chess = p.querySelector("#shopChess");
-      const job = p.querySelector("#shopJob");
       const closeBtn = p.querySelector('[data-act="close"]');
 
-      for (const id of CHESS_IDS) chess.appendChild(this._unitCard(id, { shop: true }));
-      for (const id of JOB_IDS) job.appendChild(this._unitCard(id, { shop: true }));
-      const buyCards = [...chess.children, ...job.children];
-
       const render = () => {
-        // 所持ユニット
+        // --- 品揃え ---
+        slots.replaceChildren();
+        game.shop.forEach((typeId, i) => {
+          if (!typeId) {
+            const empty = document.createElement("div");
+            empty.className = "card card--sold";
+            empty.innerHTML = '<span class="card__soldTag">売切</span>';
+            slots.appendChild(empty);
+            return;
+          }
+          const card = this._unitCard(typeId, { shop: true });
+          card.dataset.slot = String(i);
+          card.dataset.disabled =
+            game.gold < UNIT_TYPES[typeId].cost || game.isRosterFull ? "true" : "false";
+          slots.appendChild(card);
+        });
+
+        // --- 所持ユニット ---
         owned.replaceChildren();
         if (!game.roster.length) {
           const empty = document.createElement("p");
           empty.className = "shop__empty";
-          empty.textContent = "まだ1体も居ません。下から雇いましょう。";
+          empty.textContent = "まだ1体も居ません。上から雇いましょう。";
           owned.appendChild(empty);
         }
         for (const entry of game.roster) {
-          const up = game.upgradeCostOf(entry);
-          // 出撃中は★アップで出撃コストが1増えるため、上限に当たると押せない
-          const overLimit =
-            entry.onBoard && game.deployCost + 1 > game.deployLimit;
           const card = this._unitCard(entry.typeId, {
             star: entry.star,
             shop: true,
-            place: entry.onBoard ? `出撃 ${game.deployCostOf(entry)}枠` : "控え",
+            place: entry.onBoard ? "出撃" : "控え",
             actions: [
-              {
-                act: "up",
-                label: up == null ? "★MAX" : `★${entry.star + 1} ${up}G`,
-                cls: "cardbtn--gold",
-                disabled: up == null || game.gold < up || overLimit,
-              },
-              { act: "sell", label: `売 ${game.refundOf(entry)}G`, cls: "cardbtn--sell" },
+              { act: "sell", label: `売却 ${game.refundOf(entry)}G`, cls: "cardbtn--sell" },
             ],
           });
           card.dataset.entryId = String(entry.id);
           owned.appendChild(card);
         }
 
-        // 購入カードの状態（未解禁・ゴールド不足・所持上限）
-        const full = game.roster.length >= SQUAD_SIZE + 8;
-        for (const card of buyCards) {
-          const id = card.dataset.id;
-          const cost = UNIT_TYPES[id].cost;
-          const locked = !game.isUnlocked(id);
-          card.dataset.disabled =
-            locked || game.gold < cost || full ? "true" : "false";
-          card.dataset.locked = locked ? "true" : "false";
-          let tag = card.querySelector(".card__lock");
-          if (locked) {
-            if (!tag) {
-              tag = document.createElement("span");
-              tag.className = "card__lock";
-              card.appendChild(tag);
-            }
-            tag.textContent = `R${unlockRoundFor(cost)} 解禁`;
-          } else tag?.remove();
-        }
-
+        // --- 数値表示 ---
         p.querySelector("#shopGold").textContent = game.gold;
+        p.querySelector("#shopLevel").textContent = game.level;
+        const need = game.xpToNext;
+        p.querySelector("#shopXp").textContent = need
+          ? `${game.xp} / ${need} exp`
+          : "最大レベル";
+        p.querySelector("#shopXpBar").style.width = need
+          ? `${Math.min(100, (game.xp / need) * 100)}%`
+          : "100%";
+        p.querySelector("#shopOdds").innerHTML = shopOddsFor(game.level)
+          .map(
+            (pct, i) =>
+              `<span class="odds ${pct === 0 ? "odds--zero" : ""}">` +
+              `<b>${i + 1}</b>コスト ${pct}%</span>`,
+          )
+          .join("");
         p.querySelector("#shopSub").innerHTML =
-          `ラウンド ${game.round} ／ 出撃コスト上限 <b>${game.deployLimit}</b>` +
-          `（いまの合計 ${game.deployCost}）`;
-        p.querySelector("#shopNote").textContent = full
-          ? "所持数がいっぱいです（盤5＋控え8）"
+          `ラウンド ${game.round} ／ 盤に出せるのは <b>レベルと同じ ${game.maxUnits} 体</b>`;
+        p.querySelector("#shopNote").textContent = game.isRosterFull
+          ? "所持数がいっぱいです"
           : `所持 ${game.roster.length} 体 — 出撃 ${game.squad.length} / 控え ${game.bench.length}`;
+        p.querySelector('[data-act="xp"]').disabled =
+          game.level >= MAX_LEVEL || game.gold < XP_BUY_COST;
+        p.querySelector('[data-act="reroll"]').disabled = game.gold < REROLL_COST;
         closeBtn.disabled = first && game.squad.length === 0;
         onChange();
       };
@@ -411,34 +436,46 @@ export class Hud {
       });
 
       this._on(p, "click", (e) => {
-        // 所持ユニットの ★アップ / 売却
+        // 売却
         const btn = e.target.closest(".cardbtn");
         if (btn) {
-          const card = btn.closest(".card");
-          const entry = game.byId(Number(card.dataset.entryId));
-          if (!entry) return;
-          const name = UNIT_TYPES[entry.typeId].name;
-          if (btn.dataset.act === "up") {
-            const price = game.upgradeCostOf(entry);
-            const res = game.buyUpgrade(entry);
+          const entry = game.byId(Number(btn.closest(".card").dataset.entryId));
+          if (entry) {
             this.toast(
-              res.ok ? `${name} を ★${entry.star} に強化（-${price}G）` : res.reason,
+              `${UNIT_TYPES[entry.typeId].name} を ${game.refundOf(entry)}G で売却`,
             );
-          } else {
-            this.toast(`${name} を ${game.refundOf(entry)}G で売却`);
             game.sell(entry);
+            render();
           }
-          render();
           return;
         }
 
-        // 雇用
+        // 購入
         const card = e.target.closest(".card");
-        if (!card || card.classList.contains("card--static")) return;
+        if (!card || card.dataset.slot === undefined) return;
         if (card.dataset.disabled === "true") return;
-        const id = card.dataset.id;
-        if (game.buy(id)) this.toast(`${UNIT_TYPES[id].name} を雇った`);
-        else this.toast("ゴールドか空きが足りません");
+        const res = game.buySlot(Number(card.dataset.slot));
+        if (res.ok) {
+          const name = UNIT_TYPES[res.entry.typeId].name;
+          this.toast(
+            res.merged ? `${name} が ★${res.merged} に合体!` : `${name} を雇った`,
+          );
+        } else {
+          this.toast(res.reason);
+        }
+        render();
+      });
+
+      this._on(p.querySelector('[data-act="reroll"]'), "click", () => {
+        const res = game.reroll();
+        if (!res.ok) this.toast(res.reason);
+        render();
+      });
+
+      this._on(p.querySelector('[data-act="xp"]'), "click", () => {
+        const res = game.buyXp();
+        if (!res.ok) this.toast(res.reason);
+        else if (res.levelUps) this.toast(`レベル ${game.level} に上がった!`);
         render();
       });
 
@@ -450,7 +487,6 @@ export class Hud {
       render();
     });
   }
-
   /**
    * ユニットカード。
    * actions を渡すと、クリックできるボタンを内側に持つ静的カードになる
@@ -467,7 +503,7 @@ export class Hud {
     card.className = actions ? "card card--static" : "card";
     card.dataset.id = typeId;
     if (shop) {
-      badge += `<span class="card__cost">${t.cost}G</span>`;
+      badge += `<span class="card__cost" data-tier="${t.cost}">${t.cost}G</span>`;
       if (place) badge += `<span class="card__place">${place}</span>`;
     }
     card.title = `${t.name}（${t.role}）\n移動: ${t.moveText}\n${t.skill.name}: ${t.skill.text}`;
@@ -500,14 +536,13 @@ export class Hud {
   }
 
   /**
-   * ラウンド結果 + 報酬（★アップ）。
-   * ★アップの対象は控えも含めた所持ユニット全体。
+   * ラウンド結果。
+   * ★アップはショップでの3体合成に一本化したので、ここでは報酬を配らない。
    *
-   * @returns {Promise<{action:'continue'|'shop', upgradeId:number|null}>}
+   * @returns {Promise<{action:'continue'|'shop'}>}
    */
-  showRoundResult({ win, round, roster, enemyName, mvp, life, income, gold }) {
+  showRoundResult({ win, round, enemyName, mvp, life, income, gold, level }) {
     return new Promise((resolve) => {
-      const upgradable = roster.filter((u) => u.star < 3);
       const p = this._openOverlay(`
         <div class="result-tag ${win ? "result-tag--win" : "result-tag--lose"}">
           ${win ? "VICTORY" : "DEFEAT"}
@@ -527,66 +562,26 @@ export class Hud {
           </span>
           → 所持 <b style="color:#f5c451">${gold}G</b>
         </p>
-
-        <h3>報酬 — 1体を★アップ（控えも選べます）</h3>
-        <div class="roster roster--owned" id="rewardGrid"></div>
+        <p class="income income--xp">
+          経験値 <b>+${income.xp}</b>
+          ${income.levelUps ? `→ <b style="color:#7ef2a8">レベル ${level} に上がった!</b>` : `／ 現在レベル ${level}`}
+          <span class="income__break">（レベル＝盤に出せる人数）</span>
+        </p>
+        <p class="result-hint">
+          ショップの品揃えは引き直されています。同じユニットを3体そろえると★アップします。
+        </p>
         <div class="overlay__actions">
-          <span class="overlay__note" id="rewardNote">${
-            upgradable.length
-              ? "★が上がるとステータスが1.7倍になる"
-              : "全員が★3。これ以上は上げられない"
-          }</span>
-          <button class="btn btn--gold" data-act="shop">兵舎へ</button>
-          <button class="btn btn--primary" data-act="next" ${upgradable.length ? "disabled" : ""}>
-            次へ
-          </button>
+          <button class="btn btn--gold" data-act="shop">ショップへ</button>
+          <button class="btn btn--primary" data-act="next">次へ</button>
         </div>
       `);
 
-      const grid = p.querySelector("#rewardGrid");
-      const next = p.querySelector('[data-act="next"]');
-      let chosenId = null;
-
-      for (const entry of roster) {
-        const card = this._unitCard(entry.typeId, {
-          star: entry.star,
-          place: entry.onBoard ? "出撃" : "控え",
-          shop: true,
-        });
-        card.dataset.entryId = String(entry.id);
-        if (entry.star >= 3) card.dataset.disabled = "true";
-        grid.appendChild(card);
-      }
-
-      if (upgradable.length) {
-        this._on(p, "mousedown", (e) => {
-          if (e.target.closest(".card")) e.preventDefault();
-        });
-        this._on(grid, "click", (e) => {
-          const card = e.target.closest(".card");
-          if (!card || card.dataset.disabled === "true") return;
-          chosenId = Number(card.dataset.entryId);
-          for (const c of grid.children) {
-            c.dataset.selected = c === card ? "true" : "false";
-          }
-          next.disabled = false;
-        });
-      } else {
-        for (const c of grid.children) c.style.pointerEvents = "none";
-      }
-
       const finish = (action) => {
         this.closeOverlay();
-        resolve({ action, upgradeId: chosenId });
+        resolve({ action });
       };
-      this._on(next, "click", () => finish("continue"));
-      this._on(p.querySelector('[data-act="shop"]'), "click", () => {
-        if (upgradable.length && chosenId === null) {
-          this.toast("先に★アップする1体を選んでください");
-          return;
-        }
-        finish("shop");
-      });
+      this._on(p.querySelector('[data-act="next"]'), "click", () => finish("continue"));
+      this._on(p.querySelector('[data-act="shop"]'), "click", () => finish("shop"));
     });
   }
 

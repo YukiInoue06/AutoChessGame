@@ -14,12 +14,12 @@ export const Phase = {
   GAMEOVER: "gameover",
 };
 
-/** 盤に出せる最大人数 */
-export const SQUAD_SIZE = 5;
+/** レベルと同じだけ盤に出せる。ここは上限の保険 */
+export const MAX_BOARD = 8;
 export const START_LIFE = 3;
 
 /** 経済まわりの定数 */
-export const START_GOLD = 16;
+export const START_GOLD = 12;
 /** ラウンド終了時の基本収入 */
 const INCOME_BASE = 10;
 /** 勝利ボーナス */
@@ -27,18 +27,39 @@ const INCOME_WIN = 4;
 /** 連勝ボーナスの上限 */
 const INCOME_STREAK_CAP = 5;
 
-/** 出撃コストの上限（ラウンドとともに増える） */
-export function deployLimitFor(round) {
-  return Math.min(22, 9 + Math.floor((round - 1) * 0.9));
-}
+/** ------------------------------------------------------------ レベル */
 
+export const START_LEVEL = 3;
+export const MAX_LEVEL = 8;
+/** ラウンド終了時に自動でもらえる経験値 */
+export const XP_PER_ROUND = 2;
+/** 経験値の購入（TFT と同じく 4G で 4exp） */
+export const XP_BUY_COST = 4;
+export const XP_BUY_AMOUNT = 4;
+/** 次のレベルに必要な経験値 */
+const XP_TO_NEXT = { 3: 6, 4: 10, 5: 20, 6: 36, 7: 56 };
+
+/** ------------------------------------------------------------ ショップ */
+
+export const SHOP_SLOTS = 5;
+export const REROLL_COST = 2;
 /**
- * 雇えるようになるラウンド。
- * 序盤に高コストを買い込んでも出撃コスト上限のせいで2体しか出せず、
- * 立て直せないまま負ける — という罠を防ぐための解禁段階。
+ * レベルごとの、コスト帯の出現確率（%）。
+ * 添字 0..4 がコスト1..5。高コストはレベルを上げないとほぼ出ない。
  */
-const UNLOCK_ROUND = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 6 };
-export const unlockRoundFor = (cost) => UNLOCK_ROUND[cost] ?? 1;
+const SHOP_ODDS = {
+  3: [75, 25, 0, 0, 0],
+  4: [55, 30, 15, 0, 0],
+  5: [45, 33, 20, 2, 0],
+  6: [25, 40, 30, 5, 0],
+  7: [19, 30, 35, 15, 1],
+  8: [15, 25, 32, 22, 6],
+};
+export const shopOddsFor = (level) => SHOP_ODDS[Math.min(MAX_LEVEL, level)] ?? SHOP_ODDS[3];
+
+/** コスト帯ごとの購入候補 */
+const BY_COST = {};
+for (const id of UNIT_IDS) (BY_COST[UNIT_TYPES[id].cost] ??= []).push(id);
 
 /** 序盤6ラウンドの固定編成。以降は自動生成する */
 const ENEMY_SCRIPT = [
@@ -116,14 +137,19 @@ export class Game {
     this.life = START_LIFE;
     this.streak = 0;
     this.gold = START_GOLD;
+    this.level = START_LEVEL;
+    this.xp = 0;
     this.phase = Phase.SELECT;
     this._nextId = 1;
+    /** ショップの品揃え（typeId か、買われた跡の null） */
+    this.shop = [];
     /**
      * 所持ユニット。盤の上とベンチの両方をここで持ち、
      * onBoard で区別する。tile は盤上/ベンチどちらのマスも入る。
      * @type {{id:number, typeId:string, star:number, onBoard:boolean, tile:{c:number,r:number}}[]}
      */
     this.roster = [];
+    this.rollShop();
   }
 
   // ------------------------------------------------------------------ 編成
@@ -138,95 +164,113 @@ export class Game {
     return this.roster.filter((u) => !u.onBoard);
   }
 
-  /** 現在の出撃コスト合計 */
-  get deployCost() {
-    return this.squad.reduce((n, u) => n + this.deployCostOf(u), 0);
-  }
-
-  get deployLimit() {
-    return deployLimitFor(this.round);
-  }
-
-  /** 雇用コスト（兵舎での値段） */
+  /** 雇用コスト（ショップでの値段） */
   costOf(entry) {
     return UNIT_TYPES[entry.typeId].cost;
   }
 
   /**
-   * 出撃コスト。★が上がると盤の枠をより多く食う。
-   * こうしないと「安いユニットを★3にして並べる」が一方的に有利になる。
+   * 売却価格。
+   * ★2 は3体ぶん、★3 は9体ぶんの雇用コストが戻る（コスト1以外は1G差し引き）。
    */
-  deployCostOf(entry) {
-    return this.costOf(entry) + entry.star - 1;
+  refundOf(entry) {
+    const base = this.costOf(entry) * Math.pow(3, entry.star - 1);
+    return entry.star > 1 && this.costOf(entry) > 1 ? base - 1 : base;
   }
 
-  /** ★アップに必要なゴールド（★3が上限） */
-  upgradeCostOf(entry) {
-    if (entry.star >= 3) return null;
-    return this.costOf(entry) * 6 * entry.star;
+  // ---------------------------------------------------------------- レベル
+
+  /** 盤に出せる人数 = レベル */
+  get maxUnits() {
+    return Math.min(MAX_BOARD, this.level);
+  }
+
+  /** 次のレベルまでに必要な経験値。最大レベルなら null */
+  get xpToNext() {
+    return XP_TO_NEXT[this.level] ?? null;
+  }
+
+  /** 経験値を得る。溜まったらレベルアップする */
+  gainXp(amount) {
+    if (this.level >= MAX_LEVEL) return 0;
+    this.xp += amount;
+    let ups = 0;
+    while (this.level < MAX_LEVEL && this.xp >= (XP_TO_NEXT[this.level] ?? Infinity)) {
+      this.xp -= XP_TO_NEXT[this.level];
+      this.level += 1;
+      ups += 1;
+    }
+    if (this.level >= MAX_LEVEL) this.xp = 0;
+    return ups;
+  }
+
+  /** ゴールドで経験値を買う */
+  buyXp() {
+    if (this.level >= MAX_LEVEL) return { ok: false, reason: "すでに最大レベルです" };
+    if (this.gold < XP_BUY_COST) return { ok: false, reason: "ゴールドが足りません" };
+    this.gold -= XP_BUY_COST;
+    const ups = this.gainXp(XP_BUY_AMOUNT);
+    return { ok: true, levelUps: ups };
+  }
+
+  // ---------------------------------------------------------------- ショップ
+
+  /** レベルに応じた確率でコスト帯を1つ引く */
+  _rollCostTier() {
+    const odds = shopOddsFor(this.level);
+    let r = Math.random() * 100;
+    for (let i = 0; i < odds.length; i++) {
+      r -= odds[i];
+      if (r < 0) return i + 1;
+    }
+    return 1;
+  }
+
+  /** ショップの品揃えを引き直す（無料） */
+  rollShop() {
+    this.shop = Array.from({ length: SHOP_SLOTS }, () => {
+      const tier = this._rollCostTier();
+      const pool = BY_COST[tier] ?? BY_COST[1];
+      return pool[Math.floor(Math.random() * pool.length)];
+    });
+  }
+
+  /** ゴールドを払って引き直す */
+  reroll() {
+    if (this.gold < REROLL_COST) return { ok: false, reason: "ゴールドが足りません" };
+    this.gold -= REROLL_COST;
+    this.rollShop();
+    return { ok: true };
   }
 
   /**
-   * ゴールドで★アップする。
-   * ★が上がると出撃コストも1増えるので、盤に出したままだと
-   * 上限を超えてしまうことがある。その場合は断る
-   * （控えに戻せば強化できる）。
+   * 控えが埋まっているか。
+   * 買ったユニットはまず控えに入るので、これが購入の可否そのものになる
+   * （控えのマスは実際に盤の手前に BENCH_SIZE 個しかない）。
    */
-  buyUpgrade(entry) {
-    const price = this.upgradeCostOf(entry);
-    if (price == null) return { ok: false, reason: "すでに★3です" };
-    if (this.gold < price) return { ok: false, reason: "ゴールドが足りません" };
-    if (entry.onBoard && this.deployCost + 1 > this.deployLimit) {
-      return {
-        ok: false,
-        reason: `★アップで出撃コストが上限（${this.deployLimit}）を超えます。控えに戻すか他を外してください`,
-      };
-    }
-    this.gold -= price;
-    entry.star += 1;
-    return { ok: true };
+  get isBenchFull() {
+    return this.bench.length >= BENCH_SIZE;
   }
 
-  /** 売却価格（雇用ぶん＋★アップに払ったぶんの半分が戻る） */
-  refundOf(entry) {
-    let refund = this.costOf(entry);
-    for (let star = 1; star < entry.star; star++) {
-      refund += Math.round((this.costOf(entry) * 6 * star) / 2);
-    }
-    return refund;
+  /** UI 用の別名 */
+  get isRosterFull() {
+    return this.isBenchFull;
   }
 
-  /** そのユニットを盤に出せるか。理由も返す */
-  canField(entry) {
-    if (entry.onBoard) return { ok: true };
-    if (this.squad.length >= SQUAD_SIZE) {
-      return { ok: false, reason: `盤に出せるのは${SQUAD_SIZE}体までです` };
-    }
-    const cost = this.deployCostOf(entry);
-    if (this.deployCost + cost > this.deployLimit) {
-      return {
-        ok: false,
-        reason: `出撃コストが上限（${this.deployLimit}）を超えます`,
-      };
-    }
-    return { ok: true };
-  }
-
-  /** そのユニットがこのラウンドで雇えるか */
-  isUnlocked(typeId) {
+  /**
+   * ショップの1枠を買う。
+   * 買ったユニットは控えに入り、同じユニットが★込みで3体そろうと合体する。
+   */
+  buySlot(index) {
+    const typeId = this.shop[index];
+    if (!typeId) return { ok: false, reason: "その枠はもう空です" };
     const t = UNIT_TYPES[typeId];
-    return !!t && this.round >= unlockRoundFor(t.cost);
-  }
-
-  /** 購入。成功したら追加されたエントリを返す */
-  buy(typeId) {
-    const t = UNIT_TYPES[typeId];
-    if (!t || t.hidden) return null;
-    if (!this.isUnlocked(typeId)) return null;
-    if (this.gold < t.cost) return null;
-    if (this.roster.length >= SQUAD_SIZE + BENCH_SIZE) return null;
+    if (this.gold < t.cost) return { ok: false, reason: "ゴールドが足りません" };
+    if (this.isBenchFull) return { ok: false, reason: "控えがいっぱいです" };
 
     this.gold -= t.cost;
+    this.shop[index] = null;
+
     const entry = {
       id: this._nextId++,
       typeId,
@@ -235,14 +279,58 @@ export class Game {
       tile: null,
     };
     this.roster.push(entry);
+    this._placeOnBench(entry);
 
-    // 空きがあれば盤へ、無ければベンチへ
-    if (this.canField(entry).ok && this._placeOnBoard(entry)) {
-      entry.onBoard = true;
-    } else {
-      this._placeOnBench(entry);
+    const merge = this._resolveMerges(typeId);
+    // 合体で消えている場合があるので、残っている方を対象にする
+    const target = merge.entry ?? entry;
+
+    // 盤に空きがあればそのまま出す（毎回ドラッグさせないための親切）
+    if (this.roster.includes(target) && !target.onBoard && this.canField(target).ok) {
+      this.field(target);
     }
-    return entry;
+    return { ok: true, entry: target, merged: merge.star };
+  }
+
+  /**
+   * 同じユニット・同じ★が3体そろったら1体上の★に合体させる。
+   * 合体後にさらに3体そろうこともあるので、変化がなくなるまで繰り返す。
+   */
+  _resolveMerges(typeId) {
+    let mergedTo = 0;
+    let kept = null;
+    for (let star = 1; star < 3; star++) {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const same = this.roster.filter(
+          (u) => u.typeId === typeId && u.star === star,
+        );
+        if (same.length < 3) break;
+
+        // 盤に出ていたものがあれば、その位置を引き継ぐ
+        const onBoard = same.find((u) => u.onBoard);
+        const keep = onBoard ?? same[0];
+        const drop = same.filter((u) => u !== keep).slice(0, 2);
+        for (const u of drop) this.roster.splice(this.roster.indexOf(u), 1);
+
+        keep.star = star + 1;
+        mergedTo = keep.star;
+        kept = keep;
+      }
+    }
+    return { star: mergedTo, entry: kept };
+  }
+
+  /** そのユニットを盤に出せるか。理由も返す */
+  canField(entry) {
+    if (entry.onBoard) return { ok: true };
+    if (this.squad.length >= this.maxUnits) {
+      return {
+        ok: false,
+        reason: `盤に出せるのはレベルと同じ${this.maxUnits}体までです`,
+      };
+    }
+    return { ok: true };
   }
 
   /** 売却 */
@@ -267,11 +355,17 @@ export class Game {
     return { ok: true };
   }
 
-  /** ベンチに戻す */
+  /** ベンチに戻す。空きが無ければ断る */
   unfield(entry, tile = null) {
+    if (!tile && this.isBenchFull) {
+      return { ok: false, reason: "控えがいっぱいです" };
+    }
     entry.onBoard = false;
     if (tile) entry.tile = { ...tile };
-    else this._placeOnBench(entry);
+    else if (!this._placeOnBench(entry)) {
+      entry.onBoard = true;
+      return { ok: false, reason: "控えがいっぱいです" };
+    }
     return { ok: true };
   }
 
@@ -316,12 +410,21 @@ export class Game {
     return false;
   }
 
-  /** ラウンド終了時の収入 */
+  /** ラウンド終了時の収入と経験値。ショップも無料で引き直す */
   grantIncome(win) {
     const streakBonus = Math.min(this.streak, INCOME_STREAK_CAP);
     const gain = INCOME_BASE + (win ? INCOME_WIN : 0) + streakBonus;
     this.gold += gain;
-    return { gain, base: INCOME_BASE, win: win ? INCOME_WIN : 0, streak: streakBonus };
+    const levelUps = this.gainXp(XP_PER_ROUND);
+    this.rollShop();
+    return {
+      gain,
+      base: INCOME_BASE,
+      win: win ? INCOME_WIN : 0,
+      streak: streakBonus,
+      xp: XP_PER_ROUND,
+      levelUps,
+    };
   }
 
   get isOver() {
@@ -397,9 +500,12 @@ export class Game {
 
     if (idx < ENEMY_SCRIPT.length) {
       ({ comp, power, name } = ENEMY_SCRIPT[idx]);
+      // 敵の人数はプレイヤーのレベルに合わせる（TFT の対戦相手と同じ考え方）
+      comp = comp.slice(0, this.maxUnits);
+      while (comp.length < this.maxUnits) comp.push(pick(UNIT_IDS));
     } else {
       const extra = this.round - ENEMY_SCRIPT.length;
-      comp = Array.from({ length: SQUAD_SIZE }, () => pick(UNIT_IDS));
+      comp = Array.from({ length: this.maxUnits }, () => pick(UNIT_IDS));
       power = 1.32 + extra * 0.09;
       name = pick(LATE_NAMES);
     }
@@ -407,7 +513,7 @@ export class Game {
     // 後半は敵も★が上がる。
     // ★1つで1.7倍と跳ね上がるので、プレイヤーが全員を★アップし終える
     // ペース（1勝で1体）に合わせて遅らせておく。
-    const star = this.round >= 20 ? 3 : this.round >= 11 ? 2 : 1;
+    const star = this.round >= 22 ? 3 : this.round >= 13 ? 2 : 1;
     if (star > 1) power /= Math.pow(1.35, star - 1); // ★の跳ね上がりを一部相殺
 
     const cols = [3, 4, 2, 5, 1, 6, 0, 7];
@@ -446,15 +552,6 @@ export class Game {
       return "gameover";
     }
     return "lose";
-  }
-
-  /** ★アップ可能なユニット（★3が上限）。ベンチも対象 */
-  upgradableUnits() {
-    return this.roster.filter((u) => u.star < 3);
-  }
-
-  upgrade(entry) {
-    if (entry && entry.star < 3) entry.star += 1;
   }
 
   byId(id) {
