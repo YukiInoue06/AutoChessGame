@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { createPieceModel, PIECE_HEIGHT } from "./pieces.js";
 import { worldOf, COLORS } from "./scene.js";
+import { colorOf } from "../core/units.js";
 
 const BAR_W = 160;
 const BAR_H = 52;
@@ -12,46 +13,57 @@ const BAR_H = 52;
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
+/** 陣営の地の色。ここからユニット固有色へ寄せていく */
+const BODY_BASE = { player: 0xf2eee4, enemy: 0x252938 };
 /**
- * 陣営ごとのマテリアル。
+ * 固有色をそのまま塗ると陣営の明暗が崩れるので、
+ * 味方は明るく、敵は暗く寄せた色を作ってから混ぜる。
+ */
+const TONE = { player: 0.28, enemy: 0.6 }; // 味方: 白へ寄せる量 / 敵: 暗くする倍率
+const BODY_TINT = { player: 0.62, enemy: 0.7 }; // 地の色からどれだけ寄せるか
+/** 被弾フラッシュを戻すときの emissive */
+export const BASE_EMISSIVE = { player: 0x0d2436, enemy: 0x2a0d12 };
+
+/**
+ * 陣営 × ユニット固有色のマテリアル。
+ *
+ * 20種類に増えて白一色では見分けがつかないので、
+ *  - body   … 陣営の地の色をユニット色へ少しだけ寄せたもの（明暗で陣営がわかる）
+ *  - accent … ユニット色そのもの（兜・武器・装飾に出る）
+ * という配分にしている。
  * ジョブ系はローポリなので flatShading で面を立たせる。
  */
-function teamMaterials(team, lowPoly = false) {
-  const flat = lowPoly;
-  if (team === "player") {
-    return {
-      body: new THREE.MeshStandardMaterial({
-        color: 0xf2eee4,
-        roughness: 0.34,
-        metalness: 0.22,
-        emissive: new THREE.Color(0x0d2436),
-        emissiveIntensity: 1,
-        flatShading: flat,
-      }),
-      accent: new THREE.MeshStandardMaterial({
-        color: 0x7fdcff,
-        roughness: 0.2,
-        metalness: 0.65,
-        emissive: new THREE.Color(0x1c5f80),
-        flatShading: flat,
-      }),
-    };
-  }
+function teamMaterials(team, { lowPoly = false, tint = 0xffffff } = {}) {
+  const ally = team === "player";
+  const unit = new THREE.Color(tint);
+
+  // 陣営に合わせて明度を寄せたユニット色
+  const toned = ally
+    ? unit.clone().lerp(new THREE.Color(0xffffff), TONE.player)
+    : unit.clone().multiplyScalar(TONE.enemy);
+
+  const body = new THREE.Color(BODY_BASE[ally ? "player" : "enemy"]).lerp(
+    toned,
+    BODY_TINT[ally ? "player" : "enemy"],
+  );
+  // 差し色は body より彩度を上げて、兜や武器が浮き出るようにする
+  const accent = ally ? unit.clone() : unit.clone().multiplyScalar(0.95);
+
   return {
     body: new THREE.MeshStandardMaterial({
-      color: 0x272b3c,
-      roughness: 0.38,
-      metalness: 0.42,
-      emissive: new THREE.Color(0x2a0d12),
+      color: body,
+      roughness: ally ? 0.36 : 0.4,
+      metalness: ally ? 0.2 : 0.38,
+      emissive: new THREE.Color(BASE_EMISSIVE[ally ? "player" : "enemy"]),
       emissiveIntensity: 1,
-      flatShading: flat,
+      flatShading: lowPoly,
     }),
     accent: new THREE.MeshStandardMaterial({
-      color: 0xff9a9a,
-      roughness: 0.22,
-      metalness: 0.6,
-      emissive: new THREE.Color(0x6b1e1e),
-      flatShading: flat,
+      color: accent,
+      roughness: 0.24,
+      metalness: 0.55,
+      emissive: unit.clone().multiplyScalar(ally ? 0.16 : 0.12),
+      flatShading: lowPoly,
     }),
   };
 }
@@ -74,7 +86,10 @@ export class UnitView {
     this.basePos = worldOf(unit.tile);
     this.group.position.copy(this.basePos);
 
-    this.materials = teamMaterials(unit.team, unit.def.family === "job");
+    this.materials = teamMaterials(unit.team, {
+      lowPoly: unit.def.family === "job",
+      tint: colorOf(unit.typeId),
+    });
     this.model = createPieceModel(unit.typeId, this.materials);
     // 相手陣を向かせる
     this.model.rotation.y = unit.team === "player" ? 0 : Math.PI;
@@ -388,7 +403,7 @@ export class UnitView {
       if (a.flash === 0) {
         this.pulseColor = null;
         this.materials.body.emissive.setHex(
-          this.unit.team === "player" ? 0x0d2436 : 0x2a0d12,
+          BASE_EMISSIVE[this.unit.team === "player" ? "player" : "enemy"],
         );
       }
     }

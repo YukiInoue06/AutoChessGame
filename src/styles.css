@@ -487,6 +487,7 @@ html, body {
 }
 .card {
   position: relative;
+  --hue: var(--muted);
   text-align: left;
   background: rgba(255, 255, 255, 0.05);
   border: 1.5px solid var(--line);
@@ -496,6 +497,17 @@ html, body {
   color: inherit;
   font-family: inherit;
   transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--hue);
+  opacity: 0.9;
 }
 .card:hover { transform: translateY(-3px); background: rgba(255, 255, 255, 0.1); }
 .card[data-selected="true"] {

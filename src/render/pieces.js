@@ -200,6 +200,10 @@ function markShared(geo) {
 }
 
 const sharedGeo = {
+  /** コマの根元に巻く識別色のリング */
+  get collar() {
+    return (sharedGeo._co ??= markShared(new THREE.TorusGeometry(0.285, 0.03, 8, 28)));
+  },
   get finial() {
     return (sharedGeo._f ??= markShared(new THREE.SphereGeometry(0.075, 16, 12)));
   },
@@ -562,6 +566,10 @@ export function createPieceModel(typeId, materials) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   g.add(mesh);
+
+  // 根元の識別色リング。チェスのコマは差し色の面積が小さく、
+  // 20種類も並ぶと見分けづらいので、足元に色を1本入れておく
+  addMesh(g, sharedGeo.collar, accent, { y: 0.085, rx: Math.PI / 2 });
 
   switch (typeId) {
     case "rook":

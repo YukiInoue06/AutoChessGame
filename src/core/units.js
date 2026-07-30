@@ -79,6 +79,7 @@ export const DamageType = { PHYSICAL: "physical", MAGIC: "magic", TRUE: "true" }
 export const UNIT_TYPES = {
   pawn: {
     id: "pawn",
+    color: 0x94a3b8, // スレート
     family: "chess",
     cost: 1,
     name: "ポーン",
@@ -116,6 +117,7 @@ export const UNIT_TYPES = {
 
   knight: {
     id: "knight",
+    color: 0x8b5cf6, // 紫
     family: "chess",
     cost: 3,
     name: "ナイト",
@@ -142,6 +144,7 @@ export const UNIT_TYPES = {
 
   bishop: {
     id: "bishop",
+    color: 0x38bdf8, // 空色
     family: "chess",
     cost: 2,
     name: "ビショップ",
@@ -168,6 +171,7 @@ export const UNIT_TYPES = {
 
   rook: {
     id: "rook",
+    color: 0xa3722b, // 茶
     family: "chess",
     cost: 3,
     name: "ルーク",
@@ -194,6 +198,7 @@ export const UNIT_TYPES = {
 
   queen: {
     id: "queen",
+    color: 0xe0348a, // マゼンタ
     family: "chess",
     cost: 5,
     name: "クイーン",
@@ -220,6 +225,7 @@ export const UNIT_TYPES = {
 
   king: {
     id: "king",
+    color: 0xf2c14e, // 金
     family: "chess",
     cost: 4,
     name: "キング",
@@ -250,6 +256,7 @@ export const UNIT_TYPES = {
 
   warrior: {
     id: "warrior",
+    color: 0xe2533f, // 朱
     family: "job",
     cost: 2,
     name: "戦士",
@@ -276,6 +283,7 @@ export const UNIT_TYPES = {
 
   paladin: {
     id: "paladin",
+    color: 0x3f74d8, // 青
     family: "job",
     cost: 5,
     name: "聖騎士",
@@ -302,6 +310,7 @@ export const UNIT_TYPES = {
 
   archer: {
     id: "archer",
+    color: 0x4ade80, // 若草
     family: "job",
     cost: 2,
     name: "弓兵",
@@ -328,6 +337,7 @@ export const UNIT_TYPES = {
 
   cleric: {
     id: "cleric",
+    color: 0x6ee7d0, // ミント
     family: "job",
     cost: 3,
     name: "僧侶",
@@ -354,6 +364,7 @@ export const UNIT_TYPES = {
 
   wizard: {
     id: "wizard",
+    color: 0xfb8c3c, // 橙
     family: "job",
     cost: 3,
     name: "魔術師",
@@ -380,6 +391,7 @@ export const UNIT_TYPES = {
 
   thief: {
     id: "thief",
+    color: 0xa3e635, // ライム
     family: "job",
     cost: 2,
     name: "盗賊",
@@ -406,6 +418,7 @@ export const UNIT_TYPES = {
 
   dragoon: {
     id: "dragoon",
+    color: 0x0f9b8e, // 碧
     family: "job",
     cost: 4,
     name: "竜騎士",
@@ -432,6 +445,7 @@ export const UNIT_TYPES = {
 
   ninja: {
     id: "ninja",
+    color: 0x46367a, // 藍紫
     family: "job",
     cost: 3,
     name: "忍者",
@@ -458,6 +472,7 @@ export const UNIT_TYPES = {
 
   berserker: {
     id: "berserker",
+    color: 0xa01f2e, // 深紅
     family: "job",
     cost: 4,
     name: "狂戦士",
@@ -486,6 +501,7 @@ export const UNIT_TYPES = {
 
   sniper: {
     id: "sniper",
+    color: 0x3f7d3a, // 深緑
     family: "job",
     cost: 4,
     name: "狙撃手",
@@ -512,6 +528,7 @@ export const UNIT_TYPES = {
 
   summoner: {
     id: "summoner",
+    color: 0xc084fc, // 藤
     family: "job",
     cost: 4,
     name: "召喚士",
@@ -538,6 +555,7 @@ export const UNIT_TYPES = {
 
   bard: {
     id: "bard",
+    color: 0xfb7185, // 桃
     family: "job",
     cost: 3,
     name: "吟遊詩人",
@@ -566,6 +584,7 @@ export const UNIT_TYPES = {
 
   icemage: {
     id: "icemage",
+    color: 0xa8e6ff, // 氷
     family: "job",
     cost: 3,
     name: "氷術師",
@@ -592,6 +611,7 @@ export const UNIT_TYPES = {
 
   guardian: {
     id: "guardian",
+    color: 0xc9b18a, // 砂
     family: "job",
     cost: 4,
     name: "重装兵",
@@ -619,6 +639,7 @@ export const UNIT_TYPES = {
   // 召喚専用（編成では選べない）
   golem: {
     id: "golem",
+    color: 0x8b8178, // 岩
     family: "job",
     cost: 0,
     hidden: true,
@@ -651,6 +672,17 @@ export const JOB_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "job");
 
 /** ★が1つ上がるごとの倍率 */
 export const STAR_SCALE = 1.7;
+
+/**
+ * ユニットの識別色。
+ * 3Dモデルの差し色と、UIカードの色見本に使う。
+ * 陣営の区別（明るい/暗い）は保ったまま、種類を色で見分けられるようにするためのもの。
+ */
+export const colorOf = (typeId) => UNIT_TYPES[typeId]?.color ?? 0xffffff;
+
+/** CSS で使えるかたちの識別色 */
+export const cssColorOf = (typeId) =>
+  `#${colorOf(typeId).toString(16).padStart(6, "0")}`;
 
 /** コストの上限（表示用） */
 export const MAX_COST = 5;

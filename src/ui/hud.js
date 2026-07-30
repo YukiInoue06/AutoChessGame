@@ -11,6 +11,7 @@ import {
   CHESS_IDS,
   JOB_IDS,
   buildStats,
+  cssColorOf,
 } from "../core/units.js";
 import { Phase, SQUAD_SIZE, unlockRoundFor } from "../core/game.js";
 
@@ -162,6 +163,8 @@ export class Hud {
     const d = unit.def;
     this.el.inspector.hidden = false;
     this.el.inspGlyph.textContent = unit.team === "player" ? d.glyph : d.glyphDark;
+    this.el.inspGlyph.style.color = cssColorOf(unit.typeId);
+    this.el.inspGlyph.style.boxShadow = `inset 0 0 0 2px ${cssColorOf(unit.typeId)}55`;
     this.el.inspName.textContent = d.name;
     this.el.inspName.style.color = unit.team === "player" ? "#5ad2ff" : "#ff6b6b";
     this.el.inspStars.textContent = "★".repeat(unit.star);
@@ -468,8 +471,10 @@ export class Hud {
       if (place) badge += `<span class="card__place">${place}</span>`;
     }
     card.title = `${t.name}（${t.role}）\n移動: ${t.moveText}\n${t.skill.name}: ${t.skill.text}`;
+    const hue = cssColorOf(typeId);
+    card.style.setProperty("--hue", hue);
     card.innerHTML = `
-      <div class="card__glyph">${t.glyph}</div>
+      <div class="card__glyph" style="color:${hue}">${t.glyph}</div>
       <div class="card__name">${t.name}${star > 1 ? ` <span style="color:#f5c451">${"★".repeat(star)}</span>` : ""}</div>
       <div class="card__role">${t.role}</div>
       <div class="card__bars">
