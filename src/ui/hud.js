@@ -611,24 +611,21 @@ export class Hud {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <div class="shop__head">
-          <div>
-            <h2>ショップ</h2>
-            <p class="shop__sub" id="shopSub"></p>
-          </div>
-          <div class="shop__wallet">
-            <span class="shop__gold" id="shopGold">0</span>
-            <span class="shop__goldLabel">ゴールド</span>
-          </div>
+          <h2>ショップ</h2>
+          <p class="shop__sub" id="shopSub"></p>
         </div>
 
         <div class="shop__bar">
           <div class="shop__level">
-            <button type="button" class="shop__levelHead" data-act="odds"
-              aria-expanded="false" aria-controls="shopOdds">
-              <span>レベル <b id="shopLevel">3</b></span>
-              <span id="shopXp"></span>
-              <span class="shop__caret" aria-hidden="true">▾</span>
-            </button>
+            <div class="shop__levelTop">
+              <button type="button" class="shop__levelHead" data-act="odds"
+                aria-expanded="false" aria-controls="shopOdds">
+                <span>レベル <b id="shopLevel">3</b></span>
+                <span id="shopXp"></span>
+                <span class="shop__caret" aria-hidden="true">▾</span>
+              </button>
+              <span class="shop__wallet"><b id="shopGold">0</b>G</span>
+            </div>
             <span class="xpbar xpbar--wide"><span class="xpbar__fill" id="shopXpBar"></span></span>
             <div class="shop__odds" id="shopOdds" hidden></div>
           </div>
@@ -727,7 +724,7 @@ export class Hud {
           ? "品揃え — タップで詳細"
           : "品揃え — クリックで購入";
         p.querySelector("#shopSub").innerHTML =
-          `ラウンド ${game.round} ／ 盤に出せるのは <b>レベルと同じ ${game.maxUnits} 体</b>`;
+          `R${game.round} ・ 盤に <b>${game.maxUnits}体</b>まで`;
         p.querySelector("#shopNote").textContent = game.isRosterFull
           ? "所持数がいっぱいです"
           : `所持 ${game.roster.length} 体 — 出撃 ${game.squad.length} / 控え ${game.bench.length}`;

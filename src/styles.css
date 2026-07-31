@@ -301,30 +301,30 @@ html, body {
 .result-hint { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
 
 /* ---------- 兵舎（共通パーツ） ---------- */
+/* 見出しの右にラウンドと出せる人数を並べる（1行に収める） */
 .shop__head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
-.shop__sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
-.shop__wallet {
+.shop__sub { margin: 0; font-size: 13px; color: var(--muted); }
+.shop__sub b { color: var(--text); }
+
+/* ゴールドはレベル行の右端。独立した枠は持たせない */
+.shop__levelTop {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  background: rgba(245, 196, 81, 0.1);
-  border: 1px solid rgba(245, 196, 81, 0.3);
-  border-radius: 12px;
-  padding: 8px 16px;
+  align-items: baseline;
+  gap: 12px;
 }
-.shop__gold {
-  font-size: 26px;
-  font-weight: 800;
+.shop__levelTop .shop__levelHead { flex: 1 1 auto; min-width: 0; }
+.shop__wallet {
+  flex: none;
+  font-size: 13px;
   color: var(--gold);
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
 }
-.shop__goldLabel { font-size: 10px; letter-spacing: 0.14em; color: var(--muted); }
+.shop__wallet b { font-size: 20px; font-weight: 800; }
 .shop__empty {
   grid-column: 1 / -1;
   margin: 0;
@@ -1045,8 +1045,6 @@ kbd {
   }
   .actionbar__hint { text-align: center; max-width: none; font-size: 12px; }
   .toast { bottom: 150px; white-space: normal; max-width: 80vw; text-align: center; }
-  .shop__head { flex-direction: column; align-items: stretch; gap: 8px; }
-  .shop__wallet { flex-direction: row; align-items: center; gap: 8px; }
   .actionbar .btn--primary { width: 100%; }
   .stat { min-width: 50px; }
 }
@@ -1111,17 +1109,8 @@ kbd {
     letter-spacing: 0.08em;
   }
 
-  /* 品揃えは「雇う ◯G」に金額が出るので、コストバッジは重複 */
-  .roster--shop .card__cost { display: none; }
-
-  /* コストはカード幅が狭いので、名前の下に小さく置く */
-  .card__cost {
-    position: static;
-    display: inline-block;
-    margin-top: 5px;
-    padding: 0 6px;
-    font-size: 10px;
-  }
+  /* 「雇う ◯G」「売却 ◯G」に金額が出るので、コストバッジは重複 */
+  .card__cost { display: none; }
   .card--sold { min-height: 96px; }
   .card__lock { font-size: 9px; letter-spacing: 0.06em; }
 
