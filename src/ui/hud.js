@@ -623,12 +623,14 @@ export class Hud {
 
         <div class="shop__bar">
           <div class="shop__level">
-            <div class="shop__levelHead">
+            <button type="button" class="shop__levelHead" data-act="odds"
+              aria-expanded="false" aria-controls="shopOdds">
               <span>レベル <b id="shopLevel">3</b></span>
               <span id="shopXp"></span>
-            </div>
+              <span class="shop__caret" aria-hidden="true">▾</span>
+            </button>
             <span class="xpbar xpbar--wide"><span class="xpbar__fill" id="shopXpBar"></span></span>
-            <div class="shop__odds" id="shopOdds"></div>
+            <div class="shop__odds" id="shopOdds" hidden></div>
           </div>
           <div class="shop__buttons">
             <button class="btn btn--gold" data-act="xp">
@@ -669,10 +671,17 @@ export class Hud {
             slots.appendChild(empty);
             return;
           }
-          const card = this._unitCard(typeId, { shop: true });
+          const cost = UNIT_TYPES[typeId].cost;
+          const locked = game.gold < cost || game.isRosterFull;
+          // 狭い画面はカードをタップすると詳細が出るので、購入はボタンに分ける
+          const card = this._unitCard(typeId, {
+            shop: true,
+            actions: this.isNarrow
+              ? [{ act: "buy", label: `雇う ${cost}G`, cls: "cardbtn--buy", disabled: locked }]
+              : null,
+          });
           card.dataset.slot = String(i);
-          card.dataset.disabled =
-            game.gold < UNIT_TYPES[typeId].cost || game.isRosterFull ? "true" : "false";
+          card.dataset.disabled = locked ? "true" : "false";
           slots.appendChild(card);
         });
 
@@ -754,10 +763,15 @@ export class Hud {
       };
 
       this._on(p, "click", (e) => {
-        // 売却（横に広い画面ではカードの中にボタンが出ている）
+        // カードの中のボタン（雇う / 売却）
         const btn = e.target.closest(".cardbtn");
         if (btn) {
-          const entry = game.byId(Number(btn.closest(".card").dataset.entryId));
+          const host = btn.closest(".card");
+          if (btn.dataset.act === "buy") {
+            if (!btn.disabled) buy(Number(host.dataset.slot));
+            return;
+          }
+          const entry = game.byId(Number(host.dataset.entryId));
           if (entry) sell(entry);
           return;
         }
@@ -789,24 +803,25 @@ export class Hud {
         const slot = Number(card.dataset.slot);
         const typeId = game.shop[slot];
         if (!typeId) return;
-        const locked = card.dataset.disabled === "true";
 
-        // 狭い画面はカードに情報が乗らないので、まず詳細を出してから雇う
+        // 狭い画面はカードに情報が乗らないので、本体タップで詳細を出す
+        // （購入はカード内の「雇う」ボタン）
         if (this.isNarrow) {
-          this.showUnitSheet(typeId, {
-            actions: [
-              {
-                label: `雇う ${UNIT_TYPES[typeId].cost}G`,
-                cls: "btn--primary",
-                disabled: locked,
-                run: () => buy(slot),
-              },
-            ],
-          });
+          this.showUnitSheet(typeId);
           return;
         }
-        if (locked) return;
+        if (card.dataset.disabled === "true") return;
         buy(slot);
+      });
+
+      // 抽選確率はレベルをタップしたときだけ出す（普段は畳んで縦を稼ぐ）
+      const oddsBtn = p.querySelector('[data-act="odds"]');
+      const oddsBox = p.querySelector("#shopOdds");
+      oddsBox.hidden = this.isNarrow; // 横に広い画面は最初から開いておく
+      oddsBtn.setAttribute("aria-expanded", String(!oddsBox.hidden));
+      this._on(oddsBtn, "click", () => {
+        oddsBox.hidden = !oddsBox.hidden;
+        oddsBtn.setAttribute("aria-expanded", String(!oddsBox.hidden));
       });
 
       this._on(p.querySelector('[data-act="reroll"]'), "click", () => {

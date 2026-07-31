@@ -236,10 +236,26 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 10px;
+  width: 100%;
   font-size: 12.5px;
+  font-family: inherit;
   color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
 }
+.shop__levelHead:hover { color: var(--text); }
 .shop__levelHead b { font-size: 18px; color: var(--ally); }
+.shop__caret {
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.16s ease;
+}
+.shop__levelHead[aria-expanded="true"] .shop__caret { transform: rotate(180deg); }
+.shop__odds[hidden] { display: none; }
 .shop__odds {
   display: flex;
   flex-wrap: wrap;
@@ -1070,8 +1086,19 @@ kbd {
   .card__role,
   .card__bars,
   .card__skill,
-  .card__traits,
-  .card__actions { display: none; }
+  .card__traits { display: none; }
+
+  /* 「雇う」はカードの中に出す。本体タップは詳細シート */
+  .card__actions { margin-top: 7px; padding-top: 7px; }
+  .cardbtn { padding: 6px 3px; font-size: 10px; }
+  .cardbtn--buy {
+    color: #cfe3ff;
+    border-color: rgba(90, 160, 255, 0.45);
+    background: rgba(90, 140, 255, 0.18);
+  }
+  .cardbtn--buy:hover:not(:disabled) { background: rgba(90, 140, 255, 0.3); }
+  /* 買えないカードでも詳細は見たいので、クリックは殺さず薄くするだけ */
+  .card[data-disabled="true"] { opacity: 0.6; pointer-events: auto; }
 
   /* 出撃 / 控え は所持一覧で必要なので、小さく残す */
   .card__place {
@@ -1083,6 +1110,9 @@ kbd {
     font-size: 9px;
     letter-spacing: 0.08em;
   }
+
+  /* 品揃えは「雇う ◯G」に金額が出るので、コストバッジは重複 */
+  .roster--shop .card__cost { display: none; }
 
   /* コストはカード幅が狭いので、名前の下に小さく置く */
   .card__cost {
