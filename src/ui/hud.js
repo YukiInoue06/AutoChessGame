@@ -35,7 +35,7 @@ const PHASE_LABEL = {
 };
 
 export class Hud {
-  constructor({ onStart, onSpeedToggle, onHelp, onShop }) {
+  constructor({ onStart, onSpeedToggle, onHelp, onShop, onEnemyInfo = () => {} }) {
     this.el = {
       round: $("statRound"),
       life: $("statLife"),
@@ -73,6 +73,10 @@ export class Hud {
     this.el.btnSpeed.addEventListener("click", () => onSpeedToggle());
     this.el.btnHelp.addEventListener("click", () => onHelp());
     this.el.btnShop.addEventListener("click", () => onShop());
+    // ヒントは毎回 innerHTML で描き直すので、委譲で拾う
+    this.el.actionHint.addEventListener("click", (e) => {
+      if (e.target.closest('[data-act="enemyInfo"]')) onEnemyInfo();
+    });
 
     this._announceEl = document.createElement("div");
     Object.assign(this._announceEl.style, {
@@ -137,9 +141,9 @@ export class Hud {
    * @param {{star?:number, place?:string|null,
    *          actions?:{label:string, cls?:string, disabled?:boolean, run:() => void}[]}} opts
    */
-  showUnitSheet(typeId, { star = 1, place = null, actions = [] } = {}) {
+  showUnitSheet(typeId, { star = 1, place = null, actions = [], power = 1 } = {}) {
     const t = UNIT_TYPES[typeId];
-    const s = buildStats(typeId, { star });
+    const s = buildStats(typeId, { star, power });
     const hue = cssColorOf(typeId);
 
     const rows = [
@@ -151,16 +155,21 @@ export class Hud {
       ["魔法防御", s.resist],
     ];
 
+    // 相手のコマは買えるものではないので、値札は出さない
+    const foe = place === "敵";
+
     this._sheet.innerHTML = `
       <div class="unitsheet__head">
-        <span class="unitsheet__glyph" style="color:${hue};box-shadow:inset 0 0 0 2px ${hue}55">${t.glyph}</span>
+        <span class="unitsheet__glyph" style="color:${hue};box-shadow:inset 0 0 0 2px ${hue}55">${
+          foe ? t.glyphDark : t.glyph
+        }</span>
         <div class="unitsheet__id">
-          <div class="unitsheet__name">${t.name}${
+          <div class="unitsheet__name"${foe ? ' style="color:#ff6b6b"' : ""}>${t.name}${
             star > 1 ? ` <span class="unitsheet__stars">${"★".repeat(star)}</span>` : ""
           }</div>
           <div class="unitsheet__role">${t.role}${place ? ` ・ ${place}` : ""}</div>
         </div>
-        <span class="unitsheet__cost" data-tier="${t.cost}">${t.cost}G</span>
+        ${foe ? "" : `<span class="unitsheet__cost" data-tier="${t.cost}">${t.cost}G</span>`}
       </div>
       <div class="unitsheet__traits">${traitChips(t.traits)}</div>
       <dl class="unitsheet__stats">
@@ -366,25 +375,95 @@ export class Hud {
     );
     this.closeTraitInfo();
 
-    for (const { trait, count, tier, next } of list) {
-      const li = document.createElement("li");
-      li.className = "trait";
-      li.style.setProperty("--hue", trait.color);
-      li.dataset.active = tier ? "true" : "false";
-      li.dataset.trait = trait.id;
-      li.tabIndex = 0;
-      li.title = `${trait.name} — クリックで全段階を表示`;
-      li.innerHTML = `
-        <span class="trait__dot"></span>
-        <span class="trait__name">${trait.name}
-          <span class="trait__tier">${
-            tier ? tier.text : `あと${next.need - count}種で発動`
-          }</span>
-        </span>
-        <span class="trait__count">${count}${next ? ` / ${next.need}` : ""}</span>
-      `;
-      this.el.traitList.appendChild(li);
+    for (const entry of list) this.el.traitList.appendChild(this._traitItem(entry));
+  }
+
+  /** 特性パネルの1行。敵の編成表でも同じものを使う */
+  _traitItem({ trait, count, tier, next }) {
+    const li = document.createElement("li");
+    li.className = "trait";
+    li.style.setProperty("--hue", trait.color);
+    li.dataset.active = tier ? "true" : "false";
+    li.dataset.trait = trait.id;
+    li.tabIndex = 0;
+    li.title = `${trait.name} — クリックで全段階を表示`;
+    li.innerHTML = `
+      <span class="trait__dot"></span>
+      <span class="trait__name">${trait.name}
+        <span class="trait__tier">${
+          tier ? tier.text : `あと${next.need - count}種で発動`
+        }</span>
+      </span>
+      <span class="trait__count">${count}${next ? ` / ${next.need}` : ""}</span>
+    `;
+    return li;
+  }
+
+  /**
+   * 次の相手の編成。
+   * 特性は敵にも同じルールで乗るので、何が発動しているかまで見せる。
+   *
+   * @param {{name:string, star:number, power:number, units:{typeId:string}[]}} wave
+   */
+  showEnemyInfo(wave) {
+    if (!wave) return;
+    const list = activeTraits(
+      wave.units.map((u) => ({ typeId: u.typeId, def: UNIT_TYPES[u.typeId] })),
+    );
+    const active = list.filter((t) => t.tier);
+
+    const p = this._openOverlay(`
+      <div class="shop__head">
+        <h2>次の相手</h2>
+        <p class="shop__sub">
+          <b style="color:#ff6b6b">${wave.name}</b> ・ ★${wave.star} ・ ${wave.units.length}体
+        </p>
+      </div>
+      <h3>発動している特性${active.length ? "" : " — なし"}</h3>
+      <ul class="traits__list traits__list--flat" id="enemyTraits"></ul>
+      <h3>編成 — タップで詳細</h3>
+      <div class="roster roster--enemy" id="enemyUnits"></div>
+      <p class="shop__hint">
+        盤の上の相手のコマを直接タップしても、同じ詳細が出ます。
+      </p>
+      <div class="overlay__actions">
+        <button class="btn btn--primary" data-act="close">閉じる</button>
+      </div>
+    `);
+
+    const traitBox = p.querySelector("#enemyTraits");
+    if (active.length) {
+      for (const entry of active) traitBox.appendChild(this._traitItem(entry));
+    } else {
+      traitBox.remove();
     }
+
+    const box = p.querySelector("#enemyUnits");
+    // 同じ種類が複数いるので、まとめて「×2」で出す
+    const seen = new Map();
+    for (const u of wave.units) seen.set(u.typeId, (seen.get(u.typeId) ?? 0) + 1);
+    for (const [typeId, n] of seen) {
+      const card = this._unitCard(typeId, {
+        star: wave.star,
+        power: wave.power,
+        dark: true,
+        badge: n > 1 ? `<span class="card__count">×${n}</span>` : "",
+      });
+      card.dataset.enemy = typeId;
+      box.appendChild(card);
+    }
+
+    this._on(box, "click", (e) => {
+      const card = e.target.closest(".card");
+      if (!card?.dataset.enemy) return;
+      this.showUnitSheet(card.dataset.enemy, {
+        star: wave.star,
+        power: wave.power,
+        place: "敵",
+      });
+    });
+
+    this._on(p.querySelector('[data-act="close"]'), "click", () => this.closeOverlay());
   }
 
   /** 短いメッセージを一瞬だけ出す（コスト上限に引っかかった時など） */
@@ -561,7 +640,8 @@ export class Hud {
       <ul class="helplist">
         <li><b>ドラッグ</b> — 準備フェーズ中、自分のコマを手前3列に配置。味方どうしは入れ替えになります</li>
         <li><b>控え列へドラッグ</b> — 盤のさらに手前の列が控え。出撃メンバーから外れます</li>
-        <li><b>クリック</b> — コマの詳細（ステータス・スキル）を表示</li>
+        <li><b>クリック</b> — コマの詳細（ステータス・スキル）を表示。<b>相手のコマも見られます</b></li>
+        <li><b>「次の相手は ◯◯」</b> — 押すと相手の編成と、相手側で発動している特性が出ます</li>
         <li><b>右ドラッグ / ホイール</b> — カメラの回転とズーム</li>
         <li><kbd>Space</kbd> — バトル開始 / 速度切替</li>
       </ul>
@@ -849,10 +929,18 @@ export class Hud {
    */
   _unitCard(
     typeId,
-    { star = 1, badge = "", shop = false, place = null, actions = null } = {},
+    {
+      star = 1,
+      badge = "",
+      shop = false,
+      place = null,
+      actions = null,
+      power = 1,
+      dark = false,
+    } = {},
   ) {
     const t = UNIT_TYPES[typeId];
-    const s = buildStats(typeId, { star });
+    const s = buildStats(typeId, { star, power });
     const card = document.createElement(actions ? "div" : "button");
     if (!actions) card.type = "button";
     card.className = actions ? "card card--static" : "card";
@@ -865,7 +953,7 @@ export class Hud {
     const hue = cssColorOf(typeId);
     card.style.setProperty("--hue", hue);
     card.innerHTML = `
-      <div class="card__glyph" style="color:${hue}">${t.glyph}</div>
+      <div class="card__glyph" style="color:${hue}">${dark ? t.glyphDark : t.glyph}</div>
       <div class="card__name">${t.name}${star > 1 ? ` <span style="color:#f5c451">${"★".repeat(star)}</span>` : ""}</div>
       <div class="card__role">${t.role}</div>
       <div class="card__traits">${traitChips(t.traits)}</div>

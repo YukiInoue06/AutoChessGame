@@ -51,6 +51,7 @@ const hud = new Hud({
   onSpeedToggle: () => cycleSpeed(),
   onHelp: () => hud.showHelp(),
   onShop: () => openShop(),
+  onEnemyInfo: () => hud.showEnemyInfo(wave),
 });
 
 /** 兵舎を開く。買った/売ったぶんは即座に盤へ反映する */
@@ -272,7 +273,8 @@ function refreshPrepUI() {
     label: "バトル開始",
     disabled: fielded === 0,
     hint:
-      `次の相手は <b style="color:#ff6b6b">${wave?.name ?? "?"}</b>（★${wave?.star ?? 1}）／ ` +
+      `次の相手は <button type="button" class="hintbtn" data-act="enemyInfo">` +
+      `${wave?.name ?? "?"}（★${wave?.star ?? 1}）</button> ／ ` +
       `出撃 <b>${fielded}</b>/${game.maxUnits}体（レベル${game.level}）` +
       (fielded === 0 ? ' — <b style="color:#ff6b6b">1体以上を盤に出そう</b>' : ""),
   });

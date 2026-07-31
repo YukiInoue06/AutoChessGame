@@ -60,7 +60,12 @@ export class PlacementController {
     this.hovered = view;
     view?.setHovered(true);
     const el = this.stage.renderer.domElement;
-    el.style.cursor = view && this.active && view.unit.team === "player" ? "grab" : "";
+    // 相手のコマも詳細を出せるので、掴めなくてもクリックできると分かるように
+    el.style.cursor = !view
+      ? ""
+      : this.active && view.unit.team === "player"
+        ? "grab"
+        : "pointer";
   }
 
   _down(e) {
