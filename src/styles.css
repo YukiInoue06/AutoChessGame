@@ -588,10 +588,111 @@ html, body {
 .trait:focus-visible { outline: 2px solid var(--ally); outline-offset: 2px; }
 .trait { cursor: pointer; }
 
+/* ---------- ユニットの詳細シート（主に縦画面） ---------- */
+.sheetback {
+  position: fixed;
+  inset: 0;
+  z-index: 42; /* オーバーレイ(20)とトースト(30)より上 */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(4, 6, 12, 0.62);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 0.18s ease;
+}
+.sheetback[hidden] { display: none; }
+
+.unitsheet {
+  width: min(460px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.6);
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  animation: sheetUp 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes sheetUp { from { transform: translateY(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.unitsheet__head { display: flex; align-items: center; gap: 12px; }
+.unitsheet__glyph {
+  font-size: 30px;
+  line-height: 1;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.unitsheet__id { flex: 1 1 auto; min-width: 0; }
+.unitsheet__name { font-size: 17px; font-weight: 800; }
+.unitsheet__stars { color: var(--gold); font-size: 13px; letter-spacing: 1px; }
+.unitsheet__role { font-size: 11px; color: var(--muted); letter-spacing: 0.06em; }
+.unitsheet__cost {
+  flex: none;
+  background: rgba(245, 196, 81, 0.16);
+  border: 1px solid rgba(245, 196, 81, 0.45);
+  color: var(--gold);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.unitsheet__cost[data-tier="4"],
+.unitsheet__cost[data-tier="5"] {
+  background: rgba(199, 155, 255, 0.18);
+  border-color: rgba(199, 155, 255, 0.5);
+  color: #d9bcff;
+}
+.unitsheet__traits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
+
+.unitsheet__stats {
+  margin: 13px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 5px 10px;
+  font-size: 12.5px;
+}
+.unitsheet__stats dt { color: var(--muted); }
+.unitsheet__stats dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.unitsheet__skill {
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+.unitsheet__skill b { color: var(--gold); font-size: 13px; }
+.unitsheet__skill p { margin: 4px 0 0; font-size: 12px; line-height: 1.6; color: #c3cee4; }
+.unitsheet__move { margin-top: 9px; font-size: 11px; line-height: 1.55; color: var(--muted); }
+
+.unitsheet__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.unitsheet__actions .btn { flex: 1 1 0; padding: 12px 10px; }
+.unitsheet__actions .btn--primary { flex: 2 1 0; font-size: 15px; padding: 12px 10px; }
+.btn--sell {
+  color: #ff9d9d;
+  border-color: rgba(255, 107, 107, 0.4);
+  background: rgba(255, 107, 107, 0.12);
+}
+.btn--sell:hover { background: rgba(255, 107, 107, 0.22); }
+
 /* ---------- 特性の詳細ポップオーバー ---------- */
 .traitpop {
   position: fixed;
-  z-index: 40; /* オーバーレイ(20)とトースト(30)より上 */
+  z-index: 46; /* 詳細シート(42)よりさらに上 */
   width: min(310px, calc(100vw - 24px));
   background: var(--panel-solid);
   border: 1px solid var(--line);
@@ -918,8 +1019,8 @@ kbd {
   .trait + .trait { margin-top: 0; }
   .trait__tier { display: none; }
   .inspector { padding: 12px; }
+  .inspector { overflow-y: auto; }
   .inspector__stats { grid-template-columns: auto 1fr auto 1fr; }
-  .inspector__skillText { display: none; }
   .actionbar {
     width: 100%;
     flex-direction: column;
@@ -953,7 +1054,50 @@ kbd {
   .overlay__panel { border-radius: 18px; }
   .overlay__actions { justify-content: stretch; }
   .overlay__actions .btn { flex: 1 1 auto; }
-  .roster { grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; }
-  .card { padding: 10px; }
-  .card__skill { font-size: 10.5px; }
+  /* カードは3列。ステータスとスキルは詰め込まず、タップで出す詳細シートへ寄せる */
+  .roster { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .card {
+    padding: 9px 7px 8px;
+    border-radius: 10px;
+    min-height: 0;
+    text-align: center;
+  }
+  .card::before { top: 6px; bottom: 6px; width: 2px; }
+  .card__glyph { font-size: 26px; height: 30px; }
+  .card__name { font-size: 11.5px; margin-top: 5px; line-height: 1.25; }
+
+  /* 一覧では出さない情報 */
+  .card__role,
+  .card__bars,
+  .card__skill,
+  .card__traits,
+  .card__actions { display: none; }
+
+  /* 出撃 / 控え は所持一覧で必要なので、小さく残す */
+  .card__place {
+    position: static;
+    display: block;
+    margin-top: 4px;
+    border: none;
+    padding: 0;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+
+  /* コストはカード幅が狭いので、名前の下に小さく置く */
+  .card__cost {
+    position: static;
+    display: inline-block;
+    margin-top: 5px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
+  .card--sold { min-height: 96px; }
+  .card__lock { font-size: 9px; letter-spacing: 0.06em; }
+
+  /* レベルと抽選確率は縦に積む（横並びだと文字が折り返して読めない） */
+  .shop__bar { grid-template-columns: 1fr; gap: 12px; }
+  .shop__odds { gap: 4px 8px; font-size: 10px; }
+  .shop__buttons .btn { flex: 1 1 0; }
+  .overlay h3 { margin: 18px 0 8px; font-size: 12px; }
 }

@@ -91,6 +91,110 @@ export class Hud {
     });
     document.body.appendChild(this._announceEl);
     this._setupTraitPopover();
+    this._setupUnitSheet();
+  }
+
+  // ------------------------------------------------------- ユニットの詳細シート
+
+  /** 縦画面かどうか。カードを詰めるぶん、詳細はタップで出す */
+  get isNarrow() {
+    return matchMedia("(max-width: 640px)").matches;
+  }
+
+  _setupUnitSheet() {
+    const back = document.createElement("div");
+    back.className = "sheetback";
+    back.hidden = true;
+    const sheet = document.createElement("div");
+    sheet.className = "unitsheet";
+    sheet.id = "unitSheet";
+    back.appendChild(sheet);
+    document.body.appendChild(back);
+    this._sheetBack = back;
+    this._sheet = sheet;
+
+    back.addEventListener("click", (ev) => {
+      if (ev.target === back) this.closeUnitSheet();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && !back.hidden && this._pop.hidden) {
+        ev.stopPropagation();
+        this.closeUnitSheet();
+      }
+    });
+  }
+
+  closeUnitSheet() {
+    this._sheetBack.hidden = true;
+    this._sheet.replaceChildren();
+  }
+
+  /**
+   * ユニット1体の詳細（ステータス・スキル・特性）を下から出す。
+   * 狭い画面ではカードに乗せきれない情報をここへ寄せている。
+   *
+   * @param {string} typeId
+   * @param {{star?:number, place?:string|null,
+   *          actions?:{label:string, cls?:string, disabled?:boolean, run:() => void}[]}} opts
+   */
+  showUnitSheet(typeId, { star = 1, place = null, actions = [] } = {}) {
+    const t = UNIT_TYPES[typeId];
+    const s = buildStats(typeId, { star });
+    const hue = cssColorOf(typeId);
+
+    const rows = [
+      ["HP", s.maxHp],
+      ["攻撃力", s.atk],
+      ["攻撃速度", `${s.attackSpeed.toFixed(2)} 回/秒`],
+      ["射程", `${s.range} マス`],
+      ["防御", s.armor],
+      ["魔法防御", s.resist],
+    ];
+
+    this._sheet.innerHTML = `
+      <div class="unitsheet__head">
+        <span class="unitsheet__glyph" style="color:${hue};box-shadow:inset 0 0 0 2px ${hue}55">${t.glyph}</span>
+        <div class="unitsheet__id">
+          <div class="unitsheet__name">${t.name}${
+            star > 1 ? ` <span class="unitsheet__stars">${"★".repeat(star)}</span>` : ""
+          }</div>
+          <div class="unitsheet__role">${t.role}${place ? ` ・ ${place}` : ""}</div>
+        </div>
+        <span class="unitsheet__cost" data-tier="${t.cost}">${t.cost}G</span>
+      </div>
+      <div class="unitsheet__traits">${traitChips(t.traits)}</div>
+      <dl class="unitsheet__stats">
+        ${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}
+      </dl>
+      <div class="unitsheet__skill">
+        <b>${t.skill.name}</b>
+        <p>${t.skill.text}</p>
+      </div>
+      <div class="unitsheet__move">移動: ${t.moveText}${
+        t.auraText ? `<br>${t.auraText}` : ""
+      }</div>
+      <div class="unitsheet__actions"></div>
+    `;
+
+    const bar = this._sheet.querySelector(".unitsheet__actions");
+    for (const a of actions) {
+      const btn = document.createElement("button");
+      btn.className = `btn ${a.cls ?? ""}`;
+      btn.textContent = a.label;
+      btn.disabled = !!a.disabled;
+      btn.addEventListener("click", () => {
+        this.closeUnitSheet();
+        a.run();
+      });
+      bar.appendChild(btn);
+    }
+    const close = document.createElement("button");
+    close.className = "btn";
+    close.textContent = "閉じる";
+    close.addEventListener("click", () => this.closeUnitSheet());
+    bar.appendChild(close);
+
+    this._sheetBack.hidden = false;
   }
 
   // ------------------------------------------------------------ 特性の詳細
@@ -132,7 +236,9 @@ export class Hud {
 
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape" && !pop.hidden) {
-        ev.stopPropagation();
+        // 同じ document に付いている詳細シートの Esc まで走らせない
+        // （stopPropagation では同一要素の他のリスナーは止まらない）
+        ev.stopImmediatePropagation();
         this.closeTraitInfo();
         return;
       }
@@ -534,7 +640,7 @@ export class Hud {
           </div>
         </div>
 
-        <h3>品揃え — クリックで購入</h3>
+        <h3 id="shopSlotsHead">品揃え</h3>
         <div class="roster roster--shop" id="shopSlots"></div>
 
         <h3>所持ユニット</h3>
@@ -608,6 +714,9 @@ export class Hud {
               `<b>${i + 1}</b>コスト ${pct}%</span>`,
           )
           .join("");
+        p.querySelector("#shopSlotsHead").textContent = this.isNarrow
+          ? "品揃え — タップで詳細"
+          : "品揃え — クリックで購入";
         p.querySelector("#shopSub").innerHTML =
           `ラウンド ${game.round} ／ 盤に出せるのは <b>レベルと同じ ${game.maxUnits} 体</b>`;
         p.querySelector("#shopNote").textContent = game.isRosterFull
@@ -625,26 +734,8 @@ export class Hud {
         if (e.target.closest(".card")) e.preventDefault();
       });
 
-      this._on(p, "click", (e) => {
-        // 売却
-        const btn = e.target.closest(".cardbtn");
-        if (btn) {
-          const entry = game.byId(Number(btn.closest(".card").dataset.entryId));
-          if (entry) {
-            this.toast(
-              `${UNIT_TYPES[entry.typeId].name} を ${game.refundOf(entry)}G で売却`,
-            );
-            game.sell(entry);
-            render();
-          }
-          return;
-        }
-
-        // 購入
-        const card = e.target.closest(".card");
-        if (!card || card.dataset.slot === undefined) return;
-        if (card.dataset.disabled === "true") return;
-        const res = game.buySlot(Number(card.dataset.slot));
+      const buy = (slot) => {
+        const res = game.buySlot(slot);
         if (res.ok) {
           const name = UNIT_TYPES[res.entry.typeId].name;
           this.toast(
@@ -654,6 +745,68 @@ export class Hud {
           this.toast(res.reason);
         }
         render();
+      };
+
+      const sell = (entry) => {
+        this.toast(`${UNIT_TYPES[entry.typeId].name} を ${game.refundOf(entry)}G で売却`);
+        game.sell(entry);
+        render();
+      };
+
+      this._on(p, "click", (e) => {
+        // 売却（横に広い画面ではカードの中にボタンが出ている）
+        const btn = e.target.closest(".cardbtn");
+        if (btn) {
+          const entry = game.byId(Number(btn.closest(".card").dataset.entryId));
+          if (entry) sell(entry);
+          return;
+        }
+
+        const card = e.target.closest(".card");
+        if (!card) return;
+
+        // 所持ユニット
+        if (card.dataset.entryId !== undefined) {
+          if (!this.isNarrow) return; // 横画面はカード内のボタンから
+          const entry = game.byId(Number(card.dataset.entryId));
+          if (!entry) return;
+          this.showUnitSheet(entry.typeId, {
+            star: entry.star,
+            place: entry.onBoard ? "出撃中" : "控え",
+            actions: [
+              {
+                label: `売却 ${game.refundOf(entry)}G`,
+                cls: "btn--sell",
+                run: () => sell(entry),
+              },
+            ],
+          });
+          return;
+        }
+
+        // 品揃え
+        if (card.dataset.slot === undefined) return;
+        const slot = Number(card.dataset.slot);
+        const typeId = game.shop[slot];
+        if (!typeId) return;
+        const locked = card.dataset.disabled === "true";
+
+        // 狭い画面はカードに情報が乗らないので、まず詳細を出してから雇う
+        if (this.isNarrow) {
+          this.showUnitSheet(typeId, {
+            actions: [
+              {
+                label: `雇う ${UNIT_TYPES[typeId].cost}G`,
+                cls: "btn--primary",
+                disabled: locked,
+                run: () => buy(slot),
+              },
+            ],
+          });
+          return;
+        }
+        if (locked) return;
+        buy(slot);
       });
 
       this._on(p.querySelector('[data-act="reroll"]'), "click", () => {
