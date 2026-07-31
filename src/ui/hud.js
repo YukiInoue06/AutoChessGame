@@ -90,6 +90,147 @@ export class Hud {
       whiteSpace: "nowrap",
     });
     document.body.appendChild(this._announceEl);
+    this._setupTraitPopover();
+  }
+
+  // ------------------------------------------------------------ 特性の詳細
+
+  /**
+   * 特性チップ（パネル・カード・インスペクタ）をクリックすると
+   * 全段階の効果を出すポップオーバー。
+   *
+   * ホバーの title 属性だとタッチ端末で読めないので、
+   * 3か所から同じものを開けるようにひとつだけ作って使い回す。
+   */
+  _setupTraitPopover() {
+    /** @type {Map<string, {count:number, tierIndex:number, ids:string[]}>} */
+    this._traitState = new Map();
+
+    const pop = document.createElement("div");
+    pop.className = "traitpop";
+    pop.id = "traitPop";
+    pop.hidden = true;
+    document.body.appendChild(pop);
+    this._pop = pop;
+
+    // チップはオーバーレイの中にも出るので、拾うのは document 側で1回だけ
+    document.addEventListener(
+      "click",
+      (ev) => {
+        const chip = ev.target.closest?.("[data-trait]");
+        if (chip) {
+          // ショップのカードの上にも乗るので、購入クリックには伝えない
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.showTraitInfo(chip.dataset.trait, chip);
+          return;
+        }
+        if (!pop.hidden && !ev.target.closest?.(".traitpop")) this.closeTraitInfo();
+      },
+      true,
+    );
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && !pop.hidden) {
+        ev.stopPropagation();
+        this.closeTraitInfo();
+        return;
+      }
+      // span なので Enter / Space では click が飛ばない。自分で拾う
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const chip = ev.target.closest?.("[data-trait]");
+      if (!chip) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.showTraitInfo(chip.dataset.trait, chip);
+    });
+
+    addEventListener("resize", () => this.closeTraitInfo());
+  }
+
+  closeTraitInfo() {
+    this._pop.hidden = true;
+    this._pop.replaceChildren();
+  }
+
+  /**
+   * 特性の全段階を出す。
+   * @param {string} id 特性 ID
+   * @param {Element} anchor この要素の近くに出す
+   */
+  showTraitInfo(id, anchor) {
+    const trait = TRAITS[id];
+    if (!trait) return;
+    const state = this._traitState.get(id);
+    const count = state?.count ?? 0;
+    const have = new Set(state?.ids ?? []);
+
+    const tiers = trait.tiers
+      .map((t, i) => {
+        const reached = count >= t.need;
+        const isTop = reached && i === (state?.tierIndex ?? -1);
+        return `<li data-state="${isTop ? "active" : reached ? "reached" : "locked"}">
+          <span class="traitpop__need">${t.need}種</span>
+          <span class="traitpop__effect">${t.text}</span>
+        </li>`;
+      })
+      .join("");
+
+    // その特性を持つユニット。盤に出ているものは色付きで示す
+    const members = [...CHESS_IDS, ...JOB_IDS]
+      .filter((uid) => UNIT_TYPES[uid].traits?.includes(id))
+      .map((uid) => {
+        const on = have.has(uid);
+        return `<span class="traitpop__unit" data-on="${on}"${
+          on ? ` style="color:${cssColorOf(uid)}"` : ""
+        }>${UNIT_TYPES[uid].name}</span>`;
+      })
+      .join("");
+
+    this._pop.innerHTML = `
+      <div class="traitpop__head" style="--hue:${trait.color}">
+        <span class="traitpop__dot"></span>
+        <span class="traitpop__name">${trait.name}</span>
+        <span class="traitpop__kind">${trait.kind === "origin" ? "出自" : "職能"}</span>
+        <span class="traitpop__count">盤上 ${count}種</span>
+      </div>
+      <p class="traitpop__desc">${trait.desc}</p>
+      <ul class="traitpop__tiers">${tiers}</ul>
+      <div class="traitpop__members">
+        <span class="traitpop__membersLabel">この特性を持つユニット</span>
+        <div class="traitpop__unitList">${members}</div>
+      </div>
+    `;
+    this._pop.hidden = false;
+    this._placePopover(anchor);
+  }
+
+  /** アンカーの近くに、画面からはみ出さないように置く */
+  _placePopover(anchor) {
+    const pop = this._pop;
+    const a = anchor.getBoundingClientRect();
+    const p = pop.getBoundingClientRect();
+    const pad = 10;
+    const clamp = (v, max) => Math.max(pad, Math.min(v, max - pad));
+
+    let left;
+    let top;
+    if (a.right + pad + p.width <= innerWidth - pad) {
+      left = a.right + pad; // 右に出す
+    } else if (a.left - pad - p.width >= pad) {
+      left = a.left - p.width - pad; // 左に出す
+    } else {
+      // 横に入らない（縦画面など）ので、下か上へ回す
+      left = clamp(a.left + a.width / 2 - p.width / 2, innerWidth - p.width);
+      top =
+        a.bottom + pad + p.height <= innerHeight - pad
+          ? a.bottom + pad
+          : a.top - p.height - pad;
+    }
+    if (top === undefined) top = a.top + a.height / 2 - p.height / 2;
+
+    pop.style.left = `${clamp(left, innerWidth - p.width)}px`;
+    pop.style.top = `${clamp(top, innerHeight - p.height)}px`;
   }
 
   // ------------------------------------------------------------ ヘッダー等
@@ -112,15 +253,21 @@ export class Hud {
   setTraits(list) {
     this.el.traits.hidden = !list.length;
     this.el.traitList.replaceChildren();
+
+    // ポップオーバーが「いま何種そろっているか」を出せるように控えておく
+    this._traitState = new Map(
+      list.map(({ trait, count, tierIndex, ids }) => [trait.id, { count, tierIndex, ids }]),
+    );
+    this.closeTraitInfo();
+
     for (const { trait, count, tier, next } of list) {
       const li = document.createElement("li");
       li.className = "trait";
       li.style.setProperty("--hue", trait.color);
       li.dataset.active = tier ? "true" : "false";
-      li.title = `${trait.name} — ${trait.desc}\n` +
-        trait.tiers
-          .map((t) => `${t.need}種: ${t.text}`)
-          .join("\n");
+      li.dataset.trait = trait.id;
+      li.tabIndex = 0;
+      li.title = `${trait.name} — クリックで全段階を表示`;
       li.innerHTML = `
         <span class="trait__dot"></span>
         <span class="trait__name">${trait.name}
@@ -284,6 +431,7 @@ export class Hud {
           <li><b>ショップ</b> — 5枠の品揃えから雇う。リロールで引き直せる</li>
           <li><b>レベル</b> — 盤に出せる人数＝レベル。経験値で上がり、高コストも出やすくなる</li>
           <li><b>合成</b> — 同じユニットが3体そろうと自動で★アップ</li>
+          <li><b>特性</b> — 盤の顔ぶれでバフが発動。左のパネルの特性名を押すと効果が出る</li>
           <li><b>準備</b> — 手前3列にドラッグで配置。控え列に置いた分は戦わない</li>
           <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち。負けるとライフが1減る</li>
         </ol>
@@ -319,6 +467,14 @@ export class Hud {
         <li>同じユニットが<b>3体そろうと自動で★アップ</b>。★2が3体そろえば★3になります</li>
         <li>控えに置いたユニットは戦闘に出ませんが、合成の数には入ります</li>
         <li>収入はラウンドごとに基本10G＋勝利4G＋連勝ボーナス（最大5G）</li>
+      </ul>
+      <h3>特性（組み合わせバフ）</h3>
+      <ul class="helplist">
+        <li>ユニットには<b>出自</b>と<b>職能</b>の特性が1つずつあり、盤に出した<b>種類数</b>で段階が決まります</li>
+        <li>同じユニットを何体並べても<b>種類数は1</b>。★アップは種類数に影響しません</li>
+        <li><b>特性名をクリック</b>すると全段階の効果が出ます（パネル・ショップのカード・コマの詳細のどこからでも）</li>
+        <li>効果はその特性を持つ本人だけに乗ります。ただし<b>支援</b>と<b>王家</b>の最大段階は味方全体に効きます</li>
+        <li><b>敵にも同じルールでバフがかかります</b>。相手の編成が揃っているほど手強くなります</li>
       </ul>
       <h3>戦闘のしくみ</h3>
       <ul class="helplist">
@@ -645,7 +801,8 @@ function traitChips(ids = []) {
     .map((id) => {
       const t = TRAITS[id];
       if (!t) return "";
-      return `<span class="traitchip" style="color:${t.color}">${t.name}</span>`;
+      return `<span class="traitchip" data-trait="${t.id}" role="button" tabindex="0"
+        title="${t.name} — クリックで効果を表示" style="color:${t.color}">${t.name}</span>`;
     })
     .join("");
 }

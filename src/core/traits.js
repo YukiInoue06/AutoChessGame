@@ -206,7 +206,8 @@ function countTraits(units) {
  * 段階に届いていないものも「あと何種類か」を見せたいので含める。
  *
  * @param {{typeId:string, def?:object}[]} units 盤に出ているユニット
- * @returns {{trait:object, count:number, tier:object|null, tierIndex:number, next:object|null}[]}
+ * @returns {{trait:object, count:number, tier:object|null, tierIndex:number,
+ *            next:object|null, ids:string[]}[]}
  */
 export function activeTraits(units) {
   const counts = countTraits(units);
@@ -225,6 +226,8 @@ export function activeTraits(units) {
       tierIndex,
       tier: tierIndex >= 0 ? trait.tiers[tierIndex] : null,
       next: trait.tiers[tierIndex + 1] ?? null,
+      // いま数に入っているユニット（UI で「持っている」印を出すのに使う）
+      ids: [...set],
     });
   }
   // 発動しているものを上に、そのなかでは段階が高い順
