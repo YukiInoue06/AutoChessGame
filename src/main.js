@@ -13,6 +13,7 @@ import { DamageType, UNIT_TYPES } from "./core/units.js";
 import { PlacementController, isDeployTile } from "./input/placement.js";
 import { isBenchTile } from "./core/board.js";
 import { activeTraits } from "./core/traits.js";
+import { drawOpenings } from "./core/openings.js";
 import { Hud } from "./ui/hud.js";
 
 const SPEEDS = [1, 1.5, 2, 3];
@@ -168,6 +169,7 @@ function buildBattle() {
   engine = new BattleEngine({
     units: [...playerUnits, ...enemyUnits],
     onEvent: handleEvent,
+    traitBonus: game.traitBonus,
   });
 
   for (const u of engine.units) {
@@ -263,10 +265,12 @@ function placeUnit(view, tile) {
 function refreshPrepUI() {
   hud.setStats(game);
   // 盤に出ているユニットから、いま効いている特性を出す
-  hud.setTraits(activeTraits(game.squad.map((u) => ({
-    typeId: u.typeId,
-    def: UNIT_TYPES[u.typeId],
-  }))));
+  hud.setTraits(
+    activeTraits(
+      game.squad.map((u) => ({ typeId: u.typeId, def: UNIT_TYPES[u.typeId] })),
+      game.traitBonus,
+    ),
+  );
   const fielded = game.squad.length;
   hud.setActionBar({
     visible: phase === Phase.PREP,
@@ -558,6 +562,11 @@ async function startNewRun() {
   hud.setPhase(phase);
   hud.setActionBar({ visible: false });
   placement.setActive(false);
+
+  // 開幕の定跡を選ぶ。開始値そのものが変わるので、盤を組む前に決める
+  game.applyOpening(await hud.showOpeningSelect(drawOpenings()));
+  hud.setOpening(game.opening);
+  hud.setStats(game);
 
   wave = game.buildEnemyWave();
   setupPrep();

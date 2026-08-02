@@ -135,15 +135,19 @@ export class Game {
 
   reset() {
     this.round = 1;
-    this.life = START_LIFE;
     this.streak = 0;
-    this.gold = START_GOLD;
-    this.level = START_LEVEL;
     this.xp = 0;
     this.phase = Phase.SELECT;
     this._nextId = 1;
+    /** 選んだオープニング。決まるまでは null（＝修正なし） */
+    this.opening = null;
+    this.life = START_LIFE;
+    this.gold = START_GOLD;
+    this.level = START_LEVEL;
     /** ショップの品揃え（typeId か、買われた跡の null） */
     this.shop = [];
+    /** 予約している枠の添字。リロールとラウンド跨ぎで残る */
+    this.locked = null;
     /**
      * 所持ユニット。盤の上とベンチの両方をここで持ち、
      * onBoard で区別する。tile は盤上/ベンチどちらのマスも入る。
@@ -151,6 +155,67 @@ export class Game {
      */
     this.roster = [];
     this.rollShop();
+  }
+
+  // ------------------------------------------------------- オープニング
+
+  /**
+   * オープニングを適用する。ラン開始時に一度だけ呼ぶ。
+   * 開始値そのものを書き換えるので、reset() の直後に呼ぶこと。
+   */
+  applyOpening(opening) {
+    this.opening = opening ?? null;
+    const m = opening?.mods ?? {};
+    this.gold = Math.max(0, START_GOLD + (m.gold ?? 0));
+    this.life = Math.max(1, START_LIFE + (m.life ?? 0));
+    this.level = Math.min(MAX_LEVEL, Math.max(1, START_LEVEL + (m.level ?? 0)));
+    for (const typeId of opening?.units ?? []) this.grantUnit(typeId);
+    this.rollShop();
+  }
+
+  /** 特性の種類数にかかる下駄（オープニング） */
+  get traitBonus() {
+    return this.opening?.traitBonus ?? null;
+  }
+
+  get rerollCost() {
+    return Math.max(1, REROLL_COST + (this.opening?.mods?.rerollCost ?? 0));
+  }
+
+  get shopSlots() {
+    return Math.max(1, SHOP_SLOTS + (this.opening?.mods?.shopSlots ?? 0));
+  }
+
+  get xpPerRound() {
+    return Math.max(0, XP_PER_ROUND + (this.opening?.mods?.xpPerRound ?? 0));
+  }
+
+  get incomeBase() {
+    return Math.max(0, INCOME_BASE + (this.opening?.mods?.income ?? 0));
+  }
+
+  get incomeWin() {
+    return Math.max(0, INCOME_WIN + (this.opening?.mods?.winIncome ?? 0));
+  }
+
+  /** ゴールドを介さずにユニットを1体渡す（オープニングの開幕ユニット） */
+  grantUnit(typeId) {
+    if (this.isBenchFull) return null;
+    const entry = {
+      id: this._nextId++,
+      typeId,
+      star: 1,
+      onBoard: false,
+      tile: null,
+    };
+    this.roster.push(entry);
+    this._placeOnBench(entry);
+    const merge = this._resolveMerges(typeId);
+    const target = merge.entry ?? entry;
+    if (this.roster.includes(target) && !target.onBoard && this.canField(target).ok) {
+      this.field(target);
+    }
+    return target;
   }
 
   // ------------------------------------------------------------------ 編成
@@ -227,19 +292,40 @@ export class Game {
     return 1;
   }
 
-  /** ショップの品揃えを引き直す（無料） */
+  /**
+   * ショップの品揃えを引き直す（無料）。
+   * 予約している枠だけはそのまま残す。
+   */
   rollShop() {
-    this.shop = Array.from({ length: SHOP_SLOTS }, () => {
+    const keepAt = this.locked;
+    const keep = keepAt != null ? this.shop[keepAt] : null;
+
+    this.shop = Array.from({ length: this.shopSlots }, () => {
       const tier = this._rollCostTier();
       const pool = BY_COST[tier] ?? BY_COST[1];
       return pool[Math.floor(Math.random() * pool.length)];
     });
+
+    // 枠数が変わって範囲外になっていたら予約は解除する
+    if (keep && keepAt < this.shop.length) this.shop[keepAt] = keep;
+    else this.locked = null;
+  }
+
+  /**
+   * 枠の予約を切り替える。予約できるのは1枠だけで、
+   * 別の枠を押すとそちらへ移る。
+   */
+  toggleLock(index) {
+    if (!this.shop[index]) return { ok: false, reason: "その枠は空です" };
+    this.locked = this.locked === index ? null : index;
+    return { ok: true, locked: this.locked };
   }
 
   /** ゴールドを払って引き直す */
   reroll() {
-    if (this.gold < REROLL_COST) return { ok: false, reason: "ゴールドが足りません" };
-    this.gold -= REROLL_COST;
+    const cost = this.rerollCost;
+    if (this.gold < cost) return { ok: false, reason: "ゴールドが足りません" };
+    this.gold -= cost;
     this.rollShop();
     return { ok: true };
   }
@@ -271,6 +357,8 @@ export class Game {
 
     this.gold -= t.cost;
     this.shop[index] = null;
+    // 予約していた枠を買ったら、予約はそこで役目を終える
+    if (this.locked === index) this.locked = null;
 
     const entry = {
       id: this._nextId++,
@@ -414,16 +502,17 @@ export class Game {
   /** ラウンド終了時の収入と経験値。ショップも無料で引き直す */
   grantIncome(win) {
     const streakBonus = Math.min(this.streak, INCOME_STREAK_CAP);
-    const gain = INCOME_BASE + (win ? INCOME_WIN : 0) + streakBonus;
+    const gain = this.incomeBase + (win ? this.incomeWin : 0) + streakBonus;
     this.gold += gain;
-    const levelUps = this.gainXp(XP_PER_ROUND);
+    const xp = this.xpPerRound;
+    const levelUps = this.gainXp(xp);
     this.rollShop();
     return {
       gain,
-      base: INCOME_BASE,
-      win: win ? INCOME_WIN : 0,
+      base: this.incomeBase,
+      win: win ? this.incomeWin : 0,
       streak: streakBonus,
-      xp: XP_PER_ROUND,
+      xp,
       levelUps,
     };
   }

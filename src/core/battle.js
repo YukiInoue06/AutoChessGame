@@ -89,7 +89,7 @@ export class BattleEngine {
   /**
    * @param {{units: object[], onEvent?: (type:string, payload:object)=>void}} opts
    */
-  constructor({ units, onEvent = () => {}, useTraits = true }) {
+  constructor({ units, onEvent = () => {}, useTraits = true, traitBonus = null }) {
     this.units = units;
     this.onEvent = onEvent;
     this.time = 0;
@@ -101,7 +101,9 @@ export class BattleEngine {
      * ここでやっておけば、ゲーム本体も検証スクリプトも同じ結果になる。
      * @type {Map<string, object[]>}
      */
-    this.traits = useTraits ? applyTraits(this.units) : new Map();
+    this.traits = useTraits
+      ? applyTraits(this.units, { player: traitBonus })
+      : new Map();
   }
 
   // ---------------------------------------------------------------- helpers

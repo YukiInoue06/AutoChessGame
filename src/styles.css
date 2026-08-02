@@ -315,6 +315,81 @@ html, body {
 .result-hint { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
 
 /* ---------- 兵舎（共通パーツ） ---------- */
+/* ---------- オープニング（開幕定跡） ---------- */
+.openingtag {
+  align-self: center;
+  margin-left: 4px;
+  padding: 3px 9px;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbb7ff;
+  white-space: nowrap;
+  cursor: help;
+}
+.openingtag[hidden] { display: none; }
+.openingtag:hover { color: #e6dcff; background: rgba(167, 139, 250, 0.12); }
+.opening__effects--solo { border-top: 0; margin-top: 14px; padding-top: 0; }
+
+.openings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.opening {
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.opening:hover {
+  transform: translateY(-3px);
+  border-color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+}
+.opening:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.opening__name { font-size: 17px; font-weight: 800; }
+.opening__en {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.opening__desc {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #c3cee4;
+}
+.opening__effects {
+  margin: 11px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.opening__effects li {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ddd0ff;
+  padding-left: 14px;
+  position: relative;
+}
+.opening__effects li::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  color: #a78bfa;
+}
+
 /* 見出しの右にラウンドと出せる人数を並べる（1行に収める） */
 .shop__head {
   display: flex;
@@ -354,6 +429,9 @@ html, body {
 /* 操作ボタンを持つカードは、それ自体はクリック対象にしない */
 .card--static { cursor: default; }
 .card--static:hover { transform: none; background: rgba(255, 255, 255, 0.05); }
+/* ただし品揃えは予約ボタンを内側に持つだけで、カード本体は押せる */
+.roster--shop .card--static { cursor: pointer; }
+.roster--shop .card--static:hover { background: rgba(255, 255, 255, 0.1); }
 .card__actions {
   display: flex;
   gap: 6px;
@@ -409,21 +487,36 @@ html, body {
   border-color: rgba(255, 107, 107, 0.42);
   color: #ff9d9d;
 }
-/* コストバッジの真下に置く（説明文と重ならないように） */
-.card__lock {
+/* ---------- 予約（この枠だけリロードで残す） ---------- */
+.card__keep {
   position: absolute;
-  inset: auto 0 0 0;
-  background: rgba(10, 13, 22, 0.86);
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 12px 12px;
-  padding: 5px 0;
-  text-align: center;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  top: 7px;
+  left: 7px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(10, 13, 22, 0.7);
   color: var(--muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
 }
-.card[data-locked="true"] { opacity: 0.55; }
+.card__keep:hover { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+.card__keep:focus-visible { outline: 2px solid var(--ally); outline-offset: 2px; }
+.card[data-kept="true"] {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.25);
+}
+.card[data-kept="true"] .card__keep {
+  background: rgba(245, 196, 81, 0.22);
+  border-color: rgba(245, 196, 81, 0.6);
+  color: var(--gold);
+}
 .shop__hint {
   margin: 12px 0 0;
   font-size: 12px;
@@ -1151,7 +1244,7 @@ kbd {
   /* 「雇う ◯G」「売却 ◯G」に金額が出るので、コストバッジは重複 */
   .card__cost { display: none; }
   .card--sold { min-height: 96px; }
-  .card__lock { font-size: 9px; letter-spacing: 0.06em; }
+  .card__keep { top: 5px; left: 5px; width: 21px; height: 21px; font-size: 11px; }
 
   /* レベルと抽選確率は縦に積む（横並びだと文字が折り返して読めない） */
   .shop__bar { grid-template-columns: 1fr; gap: 12px; }

@@ -17,7 +17,6 @@ import { TRAITS, activeTraits } from "../core/traits.js";
 import {
   Phase,
   MAX_LEVEL,
-  REROLL_COST,
   XP_BUY_COST,
   XP_BUY_AMOUNT,
   shopOddsFor,
@@ -45,6 +44,7 @@ export class Hud {
       xp: $("statXp"),
       toast: $("toast"),
       btnShop: $("btnShop"),
+      opening: $("statOpening"),
       phaseBadge: $("phaseBadge"),
       phaseText: $("phaseText"),
       actionbar: $("actionbar"),
@@ -632,6 +632,81 @@ export class Hud {
     });
   }
 
+  /**
+   * オープニング（開幕定跡）を選ぶ。ランの最初に一度だけ。
+   *
+   * @param {object[]} choices openings.js の定義
+   * @returns {Promise<object>} 選んだもの
+   */
+  showOpeningSelect(choices) {
+    return new Promise((resolve) => {
+      const p = this._openOverlay(`
+        <h2>開幕の定跡を選ぶ</h2>
+        <p>ラン全体に効きます。あとから変えられません。</p>
+        <div class="openings" id="openingList"></div>
+        <div class="overlay__actions">
+          <span class="overlay__note">選ぶとゲームが始まります</span>
+        </div>
+      `);
+
+      const box = p.querySelector("#openingList");
+      for (const o of choices) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "opening";
+        card.innerHTML = `
+          <div class="opening__name">${o.name}</div>
+          <div class="opening__en">${o.en}</div>
+          <p class="opening__desc">${o.desc}</p>
+          <ul class="opening__effects">
+            ${o.effects.map((t) => `<li>${t}</li>`).join("")}
+          </ul>
+        `;
+        this._on(card, "click", () => {
+          this.closeOverlay();
+          resolve(o);
+        });
+        box.appendChild(card);
+      }
+    });
+  }
+
+  /** いま選んでいる定跡をヘッダーに出す。押すと効果を出す */
+  setOpening(opening) {
+    const el = this.el.opening;
+    if (!el) return;
+    this._opening = opening;
+    el.hidden = !opening;
+    if (!opening) return;
+    el.textContent = opening.name;
+    el.title = `${opening.name} — クリックで効果を表示`;
+    if (!el.dataset.wired) {
+      el.dataset.wired = "1";
+      el.addEventListener("click", () => this.showOpeningInfo());
+    }
+  }
+
+  /** 選んだ定跡の効果を見返す */
+  showOpeningInfo() {
+    const o = this._opening;
+    if (!o) return;
+    const p = this._openOverlay(`
+      <div class="shop__head">
+        <h2>${o.name}</h2>
+        <p class="shop__sub">${o.en}</p>
+      </div>
+      <p>${o.desc}</p>
+      <ul class="opening__effects opening__effects--solo">
+        ${o.effects.map((t) => `<li>${t}</li>`).join("")}
+      </ul>
+      <p class="shop__hint">定跡はラン中ずっと効いていて、途中で変えることはできません。</p>
+      <div class="overlay__actions">
+        <button class="btn btn--primary" data-act="close">閉じる</button>
+      </div>
+    `);
+    this._on(p.querySelector('[data-act="close"]'), "click", () => this.closeOverlay());
+  }
+
   /** 遊びかた（いつでも閉じられる） */
   showHelp() {
     const p = this._openOverlay(`
@@ -647,12 +722,20 @@ export class Hud {
       </ul>
       <h3>ショップとレベル</h3>
       <ul class="helplist">
-        <li>ショップの<b>5枠</b>はレベルに応じた確率で抽選されます。${REROLL_COST}Gで引き直し、ラウンドごとに無料で更新</li>
+        <li>ショップの<b>5枠</b>はレベルに応じた確率で抽選されます。ラウンドごとに無料で更新</li>
+        <li><b>予約</b> — 枠の左上の 📍 を押すと、その枠だけリロールとラウンド跨ぎで残せます（1枠のみ）</li>
         <li><b>盤に出せる人数＝レベル</b>。${XP_BUY_COST}Gで${XP_BUY_AMOUNT}exp買えるほか、ラウンドごとに自動で入ります</li>
         <li>レベルが上がると<b>高コストのユニットが出やすく</b>なります（5コストはレベル7から）</li>
         <li>同じユニットが<b>3体そろうと自動で★アップ</b>。★2が3体そろえば★3になります</li>
         <li>控えに置いたユニットは戦闘に出ませんが、合成の数には入ります</li>
         <li>収入はラウンドごとに基本10G＋勝利4G＋連勝ボーナス（最大5G）</li>
+      </ul>
+      <h3>オープニング（開幕定跡）</h3>
+      <ul class="helplist">
+        <li>ランの最初に<b>定跡を1つ</b>選びます。ラン全体に効き、途中では変えられません</li>
+        <li>開始ゴールドやライフ、リロールの値段、開幕のユニットなどが変わります</li>
+        <li>特性の<b>種類数に下駄</b>をはかせる定跡もあります（ユニットが0体でも1種として数えます）</li>
+        <li>効果を見返したいときは、画面上のヘッダーにある定跡名を押してください</li>
       </ul>
       <h3>特性（組み合わせバフ）</h3>
       <ul class="helplist">
@@ -714,7 +797,7 @@ export class Hud {
               経験値を買う <span class="btn__sub">${XP_BUY_COST}G で ${XP_BUY_AMOUNT}exp</span>
             </button>
             <button class="btn" data-act="reroll">
-              リロール <span class="btn__sub">${REROLL_COST}G</span>
+              リロール <span class="btn__sub" id="shopRerollCost">${game.rerollCost}G</span>
             </button>
           </div>
         </div>
@@ -753,6 +836,7 @@ export class Hud {
           // 狭い画面はカードをタップすると詳細が出るので、購入はボタンに分ける
           const card = this._unitCard(typeId, {
             shop: true,
+            keep: game.locked === i,
             actions: this.isNarrow
               ? [{ act: "buy", label: `雇う ${cost}G`, cls: "cardbtn--buy", disabled: locked }]
               : null,
@@ -810,7 +894,8 @@ export class Hud {
           : `所持 ${game.roster.length} 体 — 出撃 ${game.squad.length} / 控え ${game.bench.length}`;
         p.querySelector('[data-act="xp"]').disabled =
           game.level >= MAX_LEVEL || game.gold < XP_BUY_COST;
-        p.querySelector('[data-act="reroll"]').disabled = game.gold < REROLL_COST;
+        p.querySelector("#shopRerollCost").textContent = `${game.rerollCost}G`;
+        p.querySelector('[data-act="reroll"]').disabled = game.gold < game.rerollCost;
         closeBtn.disabled = first && game.squad.length === 0;
         onChange();
       };
@@ -840,6 +925,23 @@ export class Hud {
       };
 
       this._on(p, "click", (e) => {
+        // 枠の予約（リロールとラウンド跨ぎで残る枠を1つだけ選べる）
+        const keepBtn = e.target.closest('[data-act="keep"]');
+        if (keepBtn) {
+          const slot = Number(keepBtn.closest(".card").dataset.slot);
+          const res = game.toggleLock(slot);
+          if (!res.ok) this.toast(res.reason);
+          else {
+            this.toast(
+              res.locked === null
+                ? "予約を解除した"
+                : `${UNIT_TYPES[game.shop[slot]].name} の枠を予約した`,
+            );
+          }
+          render();
+          return;
+        }
+
         // カードの中のボタン（雇う / 売却）
         const btn = e.target.closest(".cardbtn");
         if (btn) {
@@ -937,13 +1039,23 @@ export class Hud {
       actions = null,
       power = 1,
       dark = false,
+      keep = null,
     } = {},
   ) {
     const t = UNIT_TYPES[typeId];
     const s = buildStats(typeId, { star, power });
-    const card = document.createElement(actions ? "div" : "button");
-    if (!actions) card.type = "button";
-    card.className = actions ? "card card--static" : "card";
+    // 中にボタンを置くときは、button の入れ子を避けて div で作る
+    const nested = !!actions || keep !== null;
+    const card = document.createElement(nested ? "div" : "button");
+    if (!nested) card.type = "button";
+    card.className = nested ? "card card--static" : "card";
+    if (keep !== null) {
+      card.dataset.kept = keep ? "true" : "false";
+      badge +=
+        `<button type="button" class="card__keep" data-act="keep"` +
+        ` aria-pressed="${keep}" title="${keep ? "予約をやめる" : "この枠を予約する"}">` +
+        `${keep ? "📌" : "📍"}</button>`;
+    }
     card.dataset.id = typeId;
     if (shop) {
       badge += `<span class="card__cost" data-tier="${t.cost}">${t.cost}G</span>`;

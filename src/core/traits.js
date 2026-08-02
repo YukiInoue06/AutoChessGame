@@ -189,7 +189,7 @@ export const TRAIT_IDS = Object.keys(TRAITS);
  * @param {{typeId:string, def?:object}[]} units
  * @returns {Map<string, Set<string>>} 特性 -> ユニット種類の集合
  */
-function countTraits(units) {
+function countTraits(units, bonus) {
   const counts = new Map();
   for (const u of units) {
     const traits = u.def?.traits ?? [];
@@ -197,6 +197,10 @@ function countTraits(units) {
       if (!counts.has(t)) counts.set(t, new Set());
       counts.get(t).add(u.typeId);
     }
+  }
+  // オープニングの下駄は、その特性のユニットが1体もいなくても表に出す
+  for (const [id, n] of Object.entries(bonus ?? {})) {
+    if (n > 0 && !counts.has(id)) counts.set(id, new Set());
   }
   return counts;
 }
@@ -206,16 +210,18 @@ function countTraits(units) {
  * 段階に届いていないものも「あと何種類か」を見せたいので含める。
  *
  * @param {{typeId:string, def?:object}[]} units 盤に出ているユニット
+ * @param {Record<string, number>|null} bonus 特性ごとの種類数の下駄（オープニング）
  * @returns {{trait:object, count:number, tier:object|null, tierIndex:number,
- *            next:object|null, ids:string[]}[]}
+ *            next:object|null, ids:string[], bonus:number}[]}
  */
-export function activeTraits(units) {
-  const counts = countTraits(units);
+export function activeTraits(units, bonus = null) {
+  const counts = countTraits(units, bonus);
   const out = [];
   for (const [id, set] of counts) {
     const trait = TRAITS[id];
     if (!trait) continue;
-    const count = set.size;
+    const extra = bonus?.[id] ?? 0;
+    const count = set.size + extra;
     let tierIndex = -1;
     for (let i = 0; i < trait.tiers.length; i++) {
       if (count >= trait.tiers[i].need) tierIndex = i;
@@ -228,6 +234,7 @@ export function activeTraits(units) {
       next: trait.tiers[tierIndex + 1] ?? null,
       // いま数に入っているユニット（UI で「持っている」印を出すのに使う）
       ids: [...set],
+      bonus: extra,
     });
   }
   // 発動しているものを上に、そのなかでは段階が高い順
@@ -267,14 +274,15 @@ function addMod(target, mods) {
  * （戦闘中に特性が変わってしまうのを避けるため）。
  *
  * @param {object[]} units battle.js のユニット実体
+ * @param {Record<string, Record<string, number>>} bonuses 陣営ごとの種類数の下駄
  * @returns {Map<string, ReturnType<typeof activeTraits>>} 陣営 -> 発動中の特性（UI用）
  */
-export function applyTraits(units) {
+export function applyTraits(units, bonuses = {}) {
   const result = new Map();
 
   for (const team of ["player", "enemy"]) {
     const mine = units.filter((u) => u.team === team && !u.summoned);
-    const list = activeTraits(mine);
+    const list = activeTraits(mine, bonuses[team] ?? null);
     result.set(team, list);
 
     // まず全員ぶんの補正を足し合わせてから、一度だけ反映する
