@@ -53,6 +53,7 @@ const hud = new Hud({
   onHelp: () => hud.showHelp(),
   onShop: () => openShop(),
   onEnemyInfo: () => hud.showEnemyInfo(wave),
+  onBenchToggle: () => toggleBench(),
 });
 
 /** 兵舎を開く。買った/売ったぶんは即座に盤へ反映する */
@@ -79,7 +80,29 @@ const placement = new PlacementController(stage, {
   canPlace: () => phase === Phase.PREP,
   onSelect: (view) => selectUnit(view),
   onPlace: (view, tile) => placeUnit(view, tile),
+  onPickedChange: () => refreshPrepUI(),
 });
+
+/**
+ * 選んでいるコマを 盤 ⇄ 控え で入れ替える。
+ * 控え列は縦画面だと細い帯にしかならず狙いにくいので、
+ * 確実に押せるボタンからも同じことをできるようにしておく。
+ */
+function toggleBench() {
+  const view = placement.picked;
+  const entry = view?.squadEntry;
+  if (!entry) return;
+  const res = entry.onBoard ? game.unfield(entry) : game.field(entry);
+  if (!res.ok) {
+    hud.toast(res.reason);
+    return;
+  }
+  view.unit.tile = { ...entry.tile };
+  view.snapTo(entry.tile);
+  view.setBenched(!entry.onBoard);
+  placement.clearPicked();
+  refreshPrepUI();
+}
 
 window.addEventListener("keydown", (e) => {
   if (e.code !== "Space") return;
@@ -117,6 +140,8 @@ function clearBoard() {
  */
 function setupPrep() {
   clearBoard();
+  // ビューを作り直すので、タップで選んでいた参照は捨てる
+  placement.clearPicked();
   engine = null;
 
   for (const entry of game.roster) {
@@ -272,6 +297,10 @@ function refreshPrepUI() {
     ),
   );
   const fielded = game.squad.length;
+  const picked = placement?.picked?.squadEntry ?? null;
+  hud.setBenchToggle(
+    picked ? { onBoard: picked.onBoard, name: UNIT_TYPES[picked.typeId].name } : null,
+  );
   hud.setActionBar({
     visible: phase === Phase.PREP,
     label: "バトル開始",

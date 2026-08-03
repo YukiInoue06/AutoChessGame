@@ -173,6 +173,14 @@ html, body {
   border-color: transparent;
   color: #2a1c05;
 }
+/* 選んでいるコマを控え/盤へ動かす。控え列は細くて狙いにくいので用意した導線 */
+.btn--bench {
+  border-color: rgba(110, 231, 208, 0.45);
+  background: rgba(110, 231, 208, 0.14);
+  color: #a9f0e2;
+}
+.btn--bench:hover { background: rgba(110, 231, 208, 0.26); }
+.btn--bench[hidden] { display: none; }
 
 /* ---------- 下部アクションバー ---------- */
 .actionbar {
@@ -1182,6 +1190,53 @@ kbd {
 }
 
 @media (max-width: 640px) {
+  /*
+   * 縦画面ではインスペクタが盤の手前半分と控え列を丸ごと覆っていて、
+   * コマを選んだ瞬間に「置きたいマス」が隠れてしまっていた。
+   * 盤の上（特性チップの下）へ移して、置き場所を塞がないようにする。
+   */
+  .leftrail {
+    top: 204px;
+    bottom: auto;
+    max-height: none;
+    justify-content: flex-start;
+  }
+  /*
+   * 既定は1〜2行のコンパクト表示。パネルを叩くと詳細まで開く。
+   * 置きたいマスを塞がないことを優先し、読みたいときだけ広げる。
+   */
+  .inspector { padding: 8px 11px; cursor: pointer; }
+  .inspector__head { gap: 9px; }
+  .inspector__glyph { width: 30px; height: 30px; font-size: 21px; border-radius: 9px; }
+  .inspector__name { font-size: 13px; }
+  .inspector__stars { font-size: 10px; }
+  .inspector__traits { margin-top: 6px; gap: 4px; }
+  .inspector__stats {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    gap: 1px 6px;
+    font-size: 10.5px;
+  }
+  .inspector__stats dt::after { content: "："; }
+  .inspector__stats dd { text-align: left; margin-right: 6px; }
+  .inspector__skill { margin-top: 6px; padding-top: 6px; }
+  .inspector__skillName { font-size: 11.5px; }
+  .inspector__skillText,
+  .inspector__move { display: none; }
+  .inspector[data-expanded="true"] .inspector__skillText { display: block; font-size: 11px; }
+  .inspector[data-expanded="true"] .inspector__move { display: block; }
+  .inspector::after {
+    content: "タップで詳細";
+    display: block;
+    margin-top: 5px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-align: right;
+  }
+  .inspector[data-expanded="true"]::after { content: "タップで閉じる"; }
+
   #hud { padding: 8px; }
   .topbar { flex-wrap: wrap; gap: 8px; }
   .topbar__slot { padding: 6px 10px; flex: 1 1 auto; justify-content: center; }

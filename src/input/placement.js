@@ -17,15 +17,22 @@ export class PlacementController {
    * @param {object} stage createStage() の戻り値
    * @param {{onSelect:(view|null)=>void, onPlace:(view, tile)=>void, canPlace:()=>boolean}} handlers
    */
-  constructor(stage, { onSelect, onPlace, canPlace }) {
+  constructor(stage, { onSelect, onPlace, canPlace, onPickedChange = () => {} }) {
     this.stage = stage;
     this.onSelect = onSelect;
     this.onPlace = onPlace;
     this.canPlace = canPlace;
+    this.onPickedChange = onPickedChange;
     this.active = false;
 
     this.drag = null;
     this.hovered = null;
+    /**
+     * タップで選んだコマ。もう一度どこかを叩くとそこへ移す。
+     * ドラッグが苦手な環境（特にスマホ）向けの、もうひとつの配置手段。
+     * @type {object|null}
+     */
+    this.picked = null;
 
     const el = stage.renderer.domElement;
     el.addEventListener("pointerdown", (e) => this._down(e));
@@ -39,11 +46,22 @@ export class PlacementController {
     this.active = on;
     if (!on) {
       this._cancel();
+      this.setPicked(null);
       this.stage.clearHighlights();
       this._setHover(null);
     } else {
       this.showDeployZone();
     }
+  }
+
+  /** タップで選んだコマを切り替える。選んでいる間は少し浮かせる */
+  setPicked(view) {
+    if (this.picked === view) return;
+    if (this.picked) this.picked.lift = 0;
+    this.picked = view;
+    if (view) view.lift = 0.3;
+    this.showDeployZone();
+    this.onPickedChange(view ?? null);
   }
 
   showDeployZone() {
@@ -52,6 +70,10 @@ export class PlacementController {
       { tiles: DEPLOY_TILES, color: 0x5ad2ff, opacity: 0.22 },
       { tiles: BENCH_TILES, color: 0xf5c451, opacity: 0.16 },
     ]);
+    // 選んでいるコマの足元を強く光らせて、行き先待ちだと分かるようにする
+    if (this.picked?.unit.tile) {
+      this.stage.highlightOne(this.picked.unit.tile, 0x8affc0, 0.55);
+    }
   }
 
   _setHover(view) {
@@ -70,7 +92,7 @@ export class PlacementController {
 
   _down(e) {
     if (e.button !== 0) return;
-    const view = this.stage.pickUnit(e.clientX, e.clientY);
+    const view = this.stage.pickUnitLoose(e.clientX, e.clientY);
     this.pointerStart = { x: e.clientX, y: e.clientY, view, moved: false };
 
     if (!this.active || !view || view.unit.team !== "player" || !this.canPlace()) return;
@@ -90,7 +112,7 @@ export class PlacementController {
     }
 
     if (!this.drag) {
-      this._setHover(this.active ? this.stage.pickUnit(e.clientX, e.clientY) : null);
+      this._setHover(this.active ? this.stage.pickUnitLoose(e.clientX, e.clientY) : null);
       return;
     }
 
@@ -119,20 +141,64 @@ export class PlacementController {
       this.stage.renderer.domElement.style.cursor = "grab";
 
       if (tile && (tile.c !== origin.c || tile.r !== origin.r)) {
+        this.setPicked(null);
         this.onPlace(view, tile);
       } else {
         view.snapTo(origin);
       }
-      this.showDeployZone();
-      if (!start?.moved) this.onSelect(view);
+      // 掴んで離しただけならタップ扱い。選んだ状態にして行き先を待つ
+      if (!start?.moved) {
+        this._tap(e, view);
+      } else {
+        this.showDeployZone();
+      }
       return;
     }
 
     if (!start || start.moved) return;
+    this._tap(e, this.stage.pickUnitLoose(e.clientX, e.clientY));
+  }
 
-    // クリック（ドラッグしていない）→ 選択
-    const view = this.stage.pickUnit(e.clientX, e.clientY);
-    this.onSelect(view);
+  /**
+   * タップ1回ぶんの処理。
+   *
+   * 何も選んでいなければ「選ぶ」、自分のコマを選んでいる状態なら
+   * 叩いたマスへ「動かす」。ドラッグせずに配置できるようにするため。
+   */
+  _tap(e, view) {
+    const movable =
+      this.active && this.canPlace() && view?.unit.team === "player" ? view : null;
+
+    // 行き先待ちのコマがある
+    if (this.picked && this.picked !== view) {
+      const tile = view?.unit.tile ?? this.stage.pickTile(e.clientX, e.clientY);
+      if (tile && isDeployTile(tile)) {
+        const from = this.picked;
+        this.setPicked(null);
+        this.onPlace(from, tile);
+        this.onSelect(from);
+        return;
+      }
+      // 置けないところを叩いたら選択を解除するだけ
+      this.setPicked(null);
+      this.onSelect(view ?? null);
+      return;
+    }
+
+    // 同じコマをもう一度叩いたら選択解除
+    if (this.picked && this.picked === view) {
+      this.setPicked(null);
+      this.onSelect(view);
+      return;
+    }
+
+    this.setPicked(movable);
+    this.onSelect(view ?? null);
+  }
+
+  /** 配置が済んだあと、選択の浮きが残らないようにする */
+  clearPicked() {
+    this.setPicked(null);
   }
 
   _cancel() {

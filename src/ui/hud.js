@@ -34,7 +34,14 @@ const PHASE_LABEL = {
 };
 
 export class Hud {
-  constructor({ onStart, onSpeedToggle, onHelp, onShop, onEnemyInfo = () => {} }) {
+  constructor({
+    onStart,
+    onSpeedToggle,
+    onHelp,
+    onShop,
+    onEnemyInfo = () => {},
+    onBenchToggle = () => {},
+  }) {
     this.el = {
       round: $("statRound"),
       life: $("statLife"),
@@ -44,6 +51,7 @@ export class Hud {
       xp: $("statXp"),
       toast: $("toast"),
       btnShop: $("btnShop"),
+      btnBench: $("btnBench"),
       opening: $("statOpening"),
       phaseBadge: $("phaseBadge"),
       phaseText: $("phaseText"),
@@ -73,6 +81,7 @@ export class Hud {
     this.el.btnSpeed.addEventListener("click", () => onSpeedToggle());
     this.el.btnHelp.addEventListener("click", () => onHelp());
     this.el.btnShop.addEventListener("click", () => onShop());
+    this.el.btnBench.addEventListener("click", () => onBenchToggle());
     // ヒントは毎回 innerHTML で描き直すので、委譲で拾う
     this.el.actionHint.addEventListener("click", (e) => {
       if (e.target.closest('[data-act="enemyInfo"]')) onEnemyInfo();
@@ -96,6 +105,13 @@ export class Hud {
     document.body.appendChild(this._announceEl);
     this._setupTraitPopover();
     this._setupUnitSheet();
+
+    // 縦画面のインスペクタは既定でたたんである。叩くと詳細まで開く
+    this.el.inspector.addEventListener("click", (e) => {
+      if (e.target.closest("[data-trait]")) return; // 特性チップは別処理
+      const el = this.el.inspector;
+      el.dataset.expanded = el.dataset.expanded === "true" ? "false" : "true";
+    });
   }
 
   // ------------------------------------------------------- ユニットの詳細シート
@@ -466,6 +482,18 @@ export class Hud {
     this._on(p.querySelector('[data-act="close"]'), "click", () => this.closeOverlay());
   }
 
+  /**
+   * 選んでいるコマを控え/盤へ移すボタン。
+   * 控え列は狙いにくいので、確実な導線を用意しておく。
+   * @param {{onBoard:boolean, name:string}|null} picked
+   */
+  setBenchToggle(picked) {
+    const el = this.el.btnBench;
+    el.hidden = !picked;
+    if (!picked) return;
+    el.textContent = picked.onBoard ? `${picked.name} を控えへ` : `${picked.name} を出す`;
+  }
+
   /** 短いメッセージを一瞬だけ出す（コスト上限に引っかかった時など） */
   toast(text) {
     const el = this.el.toast;
@@ -713,11 +741,13 @@ export class Hud {
       <h2>遊びかた</h2>
       <h3>操作</h3>
       <ul class="helplist">
-        <li><b>ドラッグ</b> — 準備フェーズ中、自分のコマを手前3列に配置。味方どうしは入れ替えになります</li>
-        <li><b>控え列へドラッグ</b> — 盤のさらに手前の列が控え。出撃メンバーから外れます</li>
+        <li><b>タップして、置きたいマスをタップ</b> — 準備フェーズ中の配置。ドラッグでも同じことができます</li>
+        <li>味方のいるマスへ置くと<b>入れ替え</b>。盤のさらに手前の列が<b>控え</b>で、そこへ置くと出撃メンバーから外れます</li>
+        <li>コマは<b>マスのどこを叩いても</b>掴めます。細いコマを正確に突く必要はありません</li>
+        <li>コマを選ぶと下に<b>「◯◯ を控えへ」</b>ボタンが出ます。控え列を狙わなくても入れ替えられます</li>
         <li><b>クリック</b> — コマの詳細（ステータス・スキル）を表示。<b>相手のコマも見られます</b></li>
         <li><b>「次の相手は ◯◯」</b> — 押すと相手の編成と、相手側で発動している特性が出ます</li>
-        <li><b>右ドラッグ / ホイール</b> — カメラの回転とズーム</li>
+        <li><b>ホイール / 2本指ピンチ</b> — ズーム（盤の向きは固定です）</li>
         <li><kbd>Space</kbd> — バトル開始 / 速度切替</li>
       </ul>
       <h3>ショップとレベル</h3>

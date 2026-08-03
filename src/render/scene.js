@@ -205,17 +205,24 @@ export function createStage(canvas) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.075;
   controls.enablePan = false;
+  /**
+   * 回転は固定。盤は常に同じ向きで見る。
+   *
+   * 回せるようにしていた頃は、コマを掴み損ねたドラッグがそのまま
+   * カメラ回転になってしまい、配置のたびに盤の向きが変わっていた。
+   * 向きを変える必要のあるゲームではないので、ズームだけ残す。
+   */
+  controls.enableRotate = false;
   controls.minDistance = 7.5;
   controls.maxDistance = 22;
-  controls.minPolarAngle = 0.18;
-  controls.maxPolarAngle = 1.32;
-  controls.rotateSpeed = 0.72;
-  // 右ドラッグでも回転させる（パンは無効なので割り当てを変えておく）
   controls.mouseButtons = {
-    LEFT: THREE.MOUSE.ROTATE,
+    LEFT: null,
     MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.ROTATE,
+    RIGHT: null,
   };
+  // 1本指はコマの操作に使うので、ズームは2本指のピンチだけ。
+  // TOUCH に単独の DOLLY は無いので DOLLY_PAN を使う（パンは無効なので実質ズームのみ）
+  controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
   controls.update();
 
   // --- ライト ---
@@ -288,6 +295,26 @@ export function createStage(canvas) {
     return null;
   }
 
+  /** そのマスに乗っているユニット（生存しているもの） */
+  function unitAtTile(tile) {
+    if (!tile) return null;
+    for (const o of unitLayer.children) {
+      const view = o.userData.unitRoot;
+      const u = view?.unit;
+      if (!u?.alive || !u.tile) continue;
+      if (u.tile.c === tile.c && u.tile.r === tile.r) return view;
+    }
+    return null;
+  }
+
+  /**
+   * ユニットを拾う。モデルに当たらなくても、乗っているマスに当たれば拾う。
+   * ポーンのように細いコマを指で正確に突くのは難しいため。
+   */
+  function pickUnitLoose(clientX, clientY) {
+    return pickUnit(clientX, clientY) ?? unitAtTile(pickTile(clientX, clientY));
+  }
+
   /** マスのハイライト表示 */
   function highlight(tiles, color, opacity = 0.32) {
     clearHighlights();
@@ -346,10 +373,10 @@ export function createStage(canvas) {
     controls.minDistance = Math.max(7.5, need * 0.5);
     controls.maxDistance = Math.max(need * 1.7, 22);
 
+    // 回転を固定したので画角は決め打ちできる。遠すぎる場合も寄せて、
+    // 盤と控え列が画面いっぱいに写るようにする（縦画面ほど効く）。
     const offset = camera.position.clone().sub(controls.target);
-    if (offset.length() < need) {
-      camera.position.copy(controls.target).add(offset.setLength(need));
-    }
+    camera.position.copy(controls.target).add(offset.setLength(need));
     controls.update();
   }
 
@@ -375,6 +402,8 @@ export function createStage(canvas) {
     fxLayer,
     pickTile,
     pickUnit,
+    pickUnitLoose,
+    unitAtTile,
     highlight,
     highlightGroups,
     highlightOne,
