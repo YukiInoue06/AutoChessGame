@@ -50,8 +50,8 @@ const XP_TO_NEXT = { 3: 6, 4: 10, 5: 20, 6: 36, 7: 56 };
 export const SHOP_SLOTS = 5;
 export const REROLL_COST = 2;
 /**
- * レベルごとの、コスト帯の出現確率（%）。
- * 添字 0..4 がコスト1..5。高コストはレベルを上げないとほぼ出ない。
+ * レベルごとの、レアリティの出現確率（%）。
+ * 添字 0..4 が コモン..レジェンド。上位はレベルを上げないとほぼ出ない。
  */
 const SHOP_ODDS = {
   3: [75, 25, 0, 0, 0],
@@ -63,9 +63,9 @@ const SHOP_ODDS = {
 };
 export const shopOddsFor = (level) => SHOP_ODDS[Math.min(MAX_LEVEL, level)] ?? SHOP_ODDS[3];
 
-/** コスト帯ごとの購入候補 */
-const BY_COST = {};
-for (const id of UNIT_IDS) (BY_COST[UNIT_TYPES[id].cost] ??= []).push(id);
+/** レアリティごとの購入候補 */
+const BY_RARITY = {};
+for (const id of UNIT_IDS) (BY_RARITY[UNIT_TYPES[id].rarity] ??= []).push(id);
 
 /** 序盤6ラウンドの固定編成。以降は自動生成する */
 const ENEMY_SCRIPT = [
@@ -332,8 +332,8 @@ export class Game {
 
   // ---------------------------------------------------------------- ショップ
 
-  /** レベルに応じた確率でコスト帯を1つ引く */
-  _rollCostTier() {
+  /** レベルに応じた確率でレアリティを1つ引く */
+  _rollRarity() {
     const odds = shopOddsFor(this.level);
     let r = Math.random() * 100;
     for (let i = 0; i < odds.length; i++) {
@@ -352,8 +352,8 @@ export class Game {
     const keep = keepAt != null ? this.shop[keepAt] : null;
 
     this.shop = Array.from({ length: this.shopSlots }, () => {
-      const tier = this._rollCostTier();
-      const pool = BY_COST[tier] ?? BY_COST[1];
+      const tier = this._rollRarity();
+      const pool = BY_RARITY[tier] ?? BY_RARITY[1];
       return pool[Math.floor(Math.random() * pool.length)];
     });
 

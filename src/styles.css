@@ -312,11 +312,11 @@ html, body {
 .card__soldTag { font-size: 12px; letter-spacing: 0.2em; color: var(--muted); }
 
 /* コストバッジは帯の色をコストに合わせる */
-.card__cost[data-tier="4"],
-.card__cost[data-tier="5"] {
-  background: rgba(199, 155, 255, 0.18);
-  border-color: rgba(199, 155, 255, 0.5);
-  color: #d9bcff;
+/* 値札の色もレアリティに合わせる */
+.card__cost {
+  background: color-mix(in srgb, var(--rarity, var(--gold)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--rarity, var(--gold)) 55%, transparent);
+  color: var(--rarity, var(--gold));
 }
 
 .income--xp { margin-top: 6px; border-left-color: var(--ally); background: rgba(90, 210, 255, 0.08); }
@@ -797,12 +797,13 @@ html, body {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.unitsheet__cost[data-tier="4"],
-.unitsheet__cost[data-tier="5"] {
-  background: rgba(199, 155, 255, 0.18);
-  border-color: rgba(199, 155, 255, 0.5);
-  color: #d9bcff;
+.unitsheet__cost {
+  background: color-mix(in srgb, var(--rarity, var(--gold)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--rarity, var(--gold)) 55%, transparent);
+  color: var(--rarity, var(--gold));
 }
+.unitsheet { border-top: 3px solid var(--rarity, var(--line)); }
+.unitsheet__rarity { font-weight: 800; color: var(--rarity, var(--muted)); }
 .unitsheet__traits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
 
 .unitsheet__stats {
@@ -1047,6 +1048,19 @@ html, body {
   opacity: 0.9;
 }
 .card:hover { transform: translateY(-3px); background: rgba(255, 255, 255, 0.1); }
+
+/* カードの縁はレアリティ色。中の差し色（--hue）は種類の識別用 */
+.card { border-color: color-mix(in srgb, var(--rarity, var(--line)) 55%, transparent); }
+.card:hover { border-color: var(--rarity, var(--line)); }
+.card__rarity {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--rarity, var(--muted));
+  margin-top: 2px;
+}
+/* レジェンドだけ、ほんの少し光らせて別格に見せる */
+.card[data-rarity="legendary"] { box-shadow: 0 0 0 1px rgba(245, 184, 61, 0.3); }
 .card[data-selected="true"] {
   border-color: var(--ally);
   background: rgba(90, 210, 255, 0.14);
@@ -1269,6 +1283,7 @@ kbd {
 
   /* 一覧では出さない情報 */
   .card__role,
+  .card__rarity,
   .card__bars,
   .card__skill,
   .card__traits { display: none; }

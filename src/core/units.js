@@ -1,9 +1,11 @@
 /**
  * ユニット定義。
  *
- * ユニットは2系統ある。
- *  - family "chess": チェスのコマ。移動は本家チェスのルールを踏襲する
- *  - family "job":   RPGのジョブ。移動パターンは役割に合わせて自由に設定する
+ * ユニットは4系統ある。
+ *  - family "chess":  チェスのコマ。移動は本家チェスのルールを踏襲する
+ *  - family "job":    RPGのジョブ。移動パターンは役割に合わせて自由に設定する
+ *  - family "beast":  獣。素早いものと重いものに分かれる
+ *  - family "demon":  魔族。魔法寄りで、コストの割に尖った性能
  *
  * 攻撃射程は Chebyshev 距離（キング距離）で判定する。
  */
@@ -73,6 +75,24 @@ const MOVE = {
 export const DamageType = { PHYSICAL: "physical", MAGIC: "magic", TRUE: "true" };
 
 /**
+ * レアリティ。ショップの抽選確率はこれで決まる（1=コモン … 5=レジェンド）。
+ * 雇用コストは既定でレアリティと同じだが、別々に指定することもできる。
+ */
+export const RARITY = [
+  null,
+  { tier: 1, id: "common", name: "コモン", color: "#9fb0c9" },
+  { tier: 2, id: "uncommon", name: "アンコモン", color: "#5fd38a" },
+  { tier: 3, id: "rare", name: "レア", color: "#4aa8ff" },
+  { tier: 4, id: "epic", name: "エピック", color: "#c07bff" },
+  { tier: 5, id: "legendary", name: "レジェンド", color: "#f5b83d" },
+];
+export const RARITY_MAX = RARITY.length - 1;
+/** レアリティの表示情報。未定義なら コモン 扱い */
+export const rarityInfo = (tier) => RARITY[tier] ?? RARITY[1];
+/** ユニットのレアリティ表示情報 */
+export const rarityOf = (typeId) => rarityInfo(UNIT_TYPES[typeId]?.rarity);
+
+/**
  * ユニット定義テーブル。
  * hp/atk などは ★1 の値。★が上がるごとに STAR_SCALE 倍される。
  */
@@ -83,6 +103,7 @@ export const UNIT_TYPES = {
     color: 0x94a3b8, // スレート
     family: "chess",
     cost: 1,
+    rarity: 1,
     name: "ポーン",
     role: "前衛 / ファイター",
     glyph: "♙",
@@ -122,6 +143,7 @@ export const UNIT_TYPES = {
     color: 0x8b5cf6, // 紫
     family: "chess",
     cost: 3,
+    rarity: 3,
     name: "ナイト",
     role: "強襲 / アサシン",
     glyph: "♘",
@@ -150,6 +172,7 @@ export const UNIT_TYPES = {
     color: 0x38bdf8, // 空色
     family: "chess",
     cost: 2,
+    rarity: 2,
     name: "ビショップ",
     role: "後衛 / メイジ",
     glyph: "♗",
@@ -178,6 +201,7 @@ export const UNIT_TYPES = {
     color: 0xa3722b, // 茶
     family: "chess",
     cost: 3,
+    rarity: 3,
     name: "ルーク",
     role: "壁 / タンク",
     glyph: "♖",
@@ -206,6 +230,7 @@ export const UNIT_TYPES = {
     color: 0xe0348a, // マゼンタ
     family: "chess",
     cost: 5,
+    rarity: 5,
     name: "クイーン",
     role: "主砲 / キャリー",
     glyph: "♕",
@@ -234,6 +259,7 @@ export const UNIT_TYPES = {
     color: 0xf2c14e, // 金
     family: "chess",
     cost: 4,
+    rarity: 4,
     name: "キング",
     role: "支援 / バッファー",
     glyph: "♔",
@@ -266,6 +292,7 @@ export const UNIT_TYPES = {
     color: 0xe2533f, // 朱
     family: "job",
     cost: 2,
+    rarity: 2,
     name: "戦士",
     role: "前衛 / ファイター",
     glyph: "⚔️",
@@ -294,6 +321,7 @@ export const UNIT_TYPES = {
     color: 0x3f74d8, // 青
     family: "job",
     cost: 5,
+    rarity: 5,
     name: "聖騎士",
     role: "壁 / プロテクター",
     glyph: "🛡️",
@@ -322,6 +350,7 @@ export const UNIT_TYPES = {
     color: 0x4ade80, // 若草
     family: "job",
     cost: 2,
+    rarity: 2,
     name: "弓兵",
     role: "後衛 / アタッカー",
     glyph: "🏹",
@@ -350,6 +379,7 @@ export const UNIT_TYPES = {
     color: 0x6ee7d0, // ミント
     family: "job",
     cost: 3,
+    rarity: 3,
     name: "僧侶",
     role: "支援 / ヒーラー",
     glyph: "✚",
@@ -378,6 +408,7 @@ export const UNIT_TYPES = {
     color: 0xfb8c3c, // 橙
     family: "job",
     cost: 3,
+    rarity: 3,
     name: "魔術師",
     role: "後衛 / 範囲メイジ",
     glyph: "🔥",
@@ -406,6 +437,7 @@ export const UNIT_TYPES = {
     color: 0xa3e635, // ライム
     family: "job",
     cost: 2,
+    rarity: 2,
     name: "盗賊",
     role: "遊撃 / 高速",
     glyph: "🗡️",
@@ -434,6 +466,7 @@ export const UNIT_TYPES = {
     color: 0x0f9b8e, // 碧
     family: "job",
     cost: 4,
+    rarity: 4,
     name: "竜騎士",
     role: "強襲 / ジャンパー",
     glyph: "🐲",
@@ -462,6 +495,7 @@ export const UNIT_TYPES = {
     color: 0x46367a, // 藍紫
     family: "job",
     cost: 3,
+    rarity: 3,
     name: "忍者",
     role: "暗殺 / 妨害",
     glyph: "🥷",
@@ -490,6 +524,7 @@ export const UNIT_TYPES = {
     color: 0xa01f2e, // 深紅
     family: "job",
     cost: 4,
+    rarity: 4,
     name: "狂戦士",
     role: "前衛 / 火力",
     glyph: "🪓",
@@ -520,6 +555,7 @@ export const UNIT_TYPES = {
     color: 0x3f7d3a, // 深緑
     family: "job",
     cost: 4,
+    rarity: 4,
     name: "狙撃手",
     role: "後衛 / 超長射程",
     glyph: "🎯",
@@ -548,6 +584,7 @@ export const UNIT_TYPES = {
     color: 0xc084fc, // 藤
     family: "job",
     cost: 4,
+    rarity: 4,
     name: "召喚士",
     role: "後衛 / 召喚",
     glyph: "👻",
@@ -576,6 +613,7 @@ export const UNIT_TYPES = {
     color: 0xfb7185, // 桃
     family: "job",
     cost: 3,
+    rarity: 3,
     name: "吟遊詩人",
     role: "支援 / バッファー",
     glyph: "🎵",
@@ -606,6 +644,7 @@ export const UNIT_TYPES = {
     color: 0xa8e6ff, // 氷
     family: "job",
     cost: 3,
+    rarity: 3,
     name: "氷術師",
     role: "後衛 / 制圧",
     glyph: "❄️",
@@ -634,6 +673,7 @@ export const UNIT_TYPES = {
     color: 0xc9b18a, // 砂
     family: "job",
     cost: 4,
+    rarity: 4,
     name: "重装兵",
     role: "壁 / 長柄",
     glyph: "🔱",
@@ -653,6 +693,176 @@ export const UNIT_TYPES = {
     skill: {
       name: "串刺し",
       text: "対象とその奥2マスまでの敵を貫き、攻撃力190%の物理ダメージ。",
+    },
+  },
+
+  // ------------------------------------------------------------ 獣
+  wolf: {
+    id: "wolf",
+    traits: ["beast", "swift"],
+    color: 0x8fa3b8, // 銀灰
+    family: "beast",
+    rarity: 2,
+    name: "狼",
+    role: "遊撃 / ビースト",
+    glyph: "🐺",
+    glyphDark: "🐺",
+    hp: 560,
+    atk: 58,
+    attackSpeed: 0.95,
+    range: 1,
+    armor: 30,
+    resist: 20,
+    moveInterval: 0.42,
+    manaMax: 60,
+    manaStart: 10,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.any2,
+    moveText: "全方向に最大2マス滑走（速い）",
+    skill: {
+      name: "牙の連撃",
+      text: "対象に攻撃力120%を2回。倒しきると自分の攻撃速度が永続的に+15%上がる。",
+    },
+  },
+
+  bear: {
+    id: "bear",
+    traits: ["beast", "heavy"],
+    color: 0x9a6b43, // 茶
+    family: "beast",
+    rarity: 3,
+    name: "熊",
+    role: "壁 / ビースト",
+    glyph: "🐻",
+    glyphDark: "🐻",
+    hp: 1010,
+    atk: 56,
+    attackSpeed: 0.6,
+    range: 1,
+    armor: 52,
+    resist: 26,
+    moveInterval: 0.82,
+    manaMax: 80,
+    manaStart: 10,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    skill: {
+      name: "熊掌一撃",
+      text: "正面3マスの敵に攻撃力200%＋1.2秒 行動不能。",
+    },
+  },
+
+  griffon: {
+    id: "griffon",
+    traits: ["beast", "blade"],
+    color: 0xd9b45c, // 金褐
+    family: "beast",
+    rarity: 4,
+    name: "グリフォン",
+    role: "強襲 / ビースト",
+    glyph: "🦅",
+    glyphDark: "🦅",
+    hp: 720,
+    atk: 76,
+    attackSpeed: 0.8,
+    range: 1,
+    armor: 34,
+    resist: 30,
+    moveInterval: 0.5,
+    manaMax: 75,
+    manaStart: 15,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.leap2,
+    moveText: "2マス先へ跳躍（飛び越える）",
+    skill: {
+      name: "急降下",
+      text: "最もHPの低い敵の隣へ舞い降り、攻撃力250%＋周囲に100%。",
+    },
+  },
+
+  // ------------------------------------------------------------ 魔族
+  imp: {
+    id: "imp",
+    traits: ["demon", "mage"],
+    color: 0xd4574f, // 赤
+    family: "demon",
+    rarity: 2,
+    name: "インプ",
+    role: "後衛 / デーモン",
+    glyph: "👺",
+    glyphDark: "👺",
+    hp: 430,
+    atk: 44,
+    attackSpeed: 0.72,
+    range: 3,
+    armor: 20,
+    resist: 26,
+    moveInterval: 0.72,
+    manaMax: 55,
+    manaStart: 10,
+    damageType: DamageType.MAGIC,
+    move: MOVE.diag2,
+    moveText: "斜めに最大2マス滑走",
+    skill: {
+      name: "業火の礫",
+      text: "対象と隣接する敵に180の魔法ダメージ。",
+    },
+  },
+
+  succubus: {
+    id: "succubus",
+    traits: ["demon", "support"],
+    color: 0xb765c9, // 紫
+    family: "demon",
+    rarity: 3,
+    name: "サキュバス",
+    role: "支援 / デーモン",
+    glyph: "🦇",
+    glyphDark: "🦇",
+    hp: 590,
+    atk: 46,
+    attackSpeed: 0.7,
+    range: 2,
+    armor: 26,
+    resist: 34,
+    moveInterval: 0.62,
+    manaMax: 70,
+    manaStart: 15,
+    damageType: DamageType.MAGIC,
+    move: MOVE.step1,
+    moveText: "全方向に1マス",
+    skill: {
+      name: "魅了",
+      text: "対象に240の魔法ダメージ、与えたぶんHPの最も低い味方を回復。",
+    },
+  },
+
+  demonlord: {
+    id: "demonlord",
+    traits: ["demon", "blade"],
+    color: 0x7b2d3a, // 暗紅
+    family: "demon",
+    rarity: 5,
+    name: "魔王",
+    role: "主砲 / デーモン",
+    glyph: "😈",
+    glyphDark: "😈",
+    hp: 980,
+    atk: 88,
+    attackSpeed: 0.68,
+    range: 1,
+    armor: 46,
+    resist: 46,
+    moveInterval: 0.7,
+    manaMax: 95,
+    manaStart: 20,
+    damageType: DamageType.PHYSICAL,
+    move: MOVE.any2,
+    moveText: "全方向に最大2マス滑走",
+    skill: {
+      name: "冥府の裁き",
+      text: "対象中心3×3に攻撃力210%の魔法。倒した敵1体につき自分を180回復。",
     },
   },
 
@@ -684,12 +894,20 @@ export const UNIT_TYPES = {
   },
 };
 
+// レアリティと雇用コストは、片方だけ書けばもう片方も揃うようにしておく
+for (const t of Object.values(UNIT_TYPES)) {
+  t.rarity ??= t.cost;
+  t.cost ??= t.rarity;
+}
+
 /** 編成で選べるユニット（召喚専用は除く） */
 export const UNIT_IDS = Object.keys(UNIT_TYPES).filter(
   (id) => !UNIT_TYPES[id].hidden,
 );
 export const CHESS_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "chess");
 export const JOB_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "job");
+export const BEAST_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "beast");
+export const DEMON_IDS = UNIT_IDS.filter((id) => UNIT_TYPES[id].family === "demon");
 
 /** ★が1つ上がるごとの倍率 */
 export const STAR_SCALE = 1.7;

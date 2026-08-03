@@ -782,6 +782,107 @@ const SKILLS = {
       engine._applyDamage(o, dmg, DamageType.PHYSICAL, u, { delay: 0.16 });
     }
   },
+
+  // ------------------------------------------------------------ 獣
+
+  /** 牙の連撃: 2回噛みつき、仕留めたら攻撃速度が永続的に上がる */
+  wolf(engine, u, target) {
+    const dmg = engine.effectiveAtk(u) * 1.2;
+    const wasAlive = target.alive;
+    for (let i = 0; i < 2; i++) {
+      engine._applyDamage(target, dmg, DamageType.PHYSICAL, u, { delay: 0.08 + i * 0.16 });
+    }
+    engine.onEvent("impact", { tile: target.tile, color: 0xd6e0ea, radius: 1.1 });
+    // ダメージは即座に入る（delay は表示のタイミングだけ）ので、その場で判定できる
+    if (wasAlive && !target.alive) {
+      u.attackSpeed *= 1.15;
+      engine.onEvent("buffPulse", { unit: u, color: 0xd6e0ea, text: "速さ+" });
+    }
+  },
+
+  /** 熊掌一撃: 正面3マスを薙ぎ、短く行動不能にする */
+  bear(engine, u, target) {
+    const dc = Math.sign(target.tile.c - u.tile.c);
+    const dr = Math.sign(target.tile.r - u.tile.r);
+    const dmg = engine.effectiveAtk(u) * 2.0;
+    // 正面と、その左右
+    const spots = [
+      { c: u.tile.c + dc, r: u.tile.r + dr },
+      { c: u.tile.c + dc + (dr ? 1 : 0), r: u.tile.r + dr + (dc ? 1 : 0) },
+      { c: u.tile.c + dc - (dr ? 1 : 0), r: u.tile.r + dr - (dc ? 1 : 0) },
+    ];
+    engine.onEvent("impact", { tile: target.tile, color: 0xc8945e, radius: 1.5 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      if (!spots.some((s) => s.c === o.tile.c && s.r === o.tile.r)) continue;
+      engine._applyDamage(o, dmg, DamageType.PHYSICAL, u, { delay: 0.14 });
+      engine._stun(o, 1.2);
+    }
+  },
+
+  /** 急降下: 最もHPの低い敵の隣へ舞い降りて叩く */
+  griffon(engine, u) {
+    const enemies = engine.units.filter((o) => o.alive && o.team !== u.team);
+    if (!enemies.length) return;
+    const victim = enemies.reduce((a, b) => (b.hp < a.hp ? b : a));
+
+    const spot = engine.freeTileNear(victim.tile, { maxRing: 2 });
+    if (spot) {
+      const from = { ...u.tile };
+      u.tile = spot;
+      u.targetUid = victim.uid;
+      u.moveCd = u.moveInterval;
+      engine.onEvent("leap", { unit: u, from, to: { ...spot }, high: true });
+    }
+
+    const main = engine.effectiveAtk(u) * 2.5;
+    const splash = engine.effectiveAtk(u) * 1.0;
+    engine.onEvent("impact", { tile: victim.tile, color: 0xf0d68a, radius: 1.8 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      const d = chebyshev(o.tile, victim.tile);
+      if (o === victim) engine._applyDamage(o, main, DamageType.PHYSICAL, u, { delay: 0.2 });
+      else if (d <= 1) engine._applyDamage(o, splash, DamageType.PHYSICAL, u, { delay: 0.24 });
+    }
+  },
+
+  // ------------------------------------------------------------ 魔族
+
+  /** 業火の礫: 対象と隣接する敵を焼く */
+  imp(engine, u, target) {
+    const dmg = 180 * u.spellPower;
+    engine.onEvent("impact", { tile: target.tile, color: 0xff7a4d, radius: 1.3 });
+    for (const o of engine.units) {
+      if (!o.alive || o.team === u.team) continue;
+      if (chebyshev(o.tile, target.tile) > 1) continue;
+      engine._applyDamage(o, dmg, DamageType.MAGIC, u, { delay: 0.12 });
+    }
+  },
+
+  /** 魅了: 吸ったぶんを、いちばん傷んでいる味方に回す */
+  succubus(engine, u, target) {
+    const dealt = engine._applyDamage(target, 240 * u.spellPower, DamageType.MAGIC, u, {
+      delay: 0.1,
+    });
+    engine.onEvent("impact", { tile: target.tile, color: 0xd88ae8, radius: 1.2 });
+    const ally = engine.lowestHp(u.team, 1)[0];
+    if (ally && dealt > 0) {
+      engine._heal(ally, dealt);
+      engine.onEvent("buffPulse", { unit: ally, color: 0xd88ae8, text: "吸収" });
+    }
+  },
+
+  /** 冥府の裁き: 3×3を薙ぎ、仕留めたぶんだけ自分が回復する */
+  demonlord(engine, u, target) {
+    const dmg = engine.effectiveAtk(u) * 2.1;
+    engine.onEvent("impact", { tile: target.tile, color: 0xff4d6d, radius: 2.0 });
+    const hit = engine.units.filter(
+      (o) => o.alive && o.team !== u.team && chebyshev(o.tile, target.tile) <= 1,
+    );
+    for (const o of hit) engine._applyDamage(o, dmg, DamageType.MAGIC, u, { delay: 0.16 });
+    const killed = hit.filter((o) => !o.alive).length;
+    if (killed) engine._heal(u, 180 * killed * u.spellPower);
+  },
 };
 
 export { nameTag };

@@ -97,6 +97,46 @@ export const TRAITS = {
     ],
   },
 
+  beast: {
+    id: "beast",
+    name: "獣",
+    kind: "origin",
+    color: "#a3b18a",
+    desc: "群れで駆ける野生。打たれ強く、足が速い。",
+    tiers: [
+      {
+        need: 2,
+        text: "最大HP+150 / 移動が20%速い",
+        mods: { self: { hp: 150, movePct: 0.2 } },
+      },
+      {
+        need: 3,
+        text: "最大HP+340 / 移動が35%速い / 攻撃力+15%",
+        mods: { self: { hp: 340, movePct: 0.35, atkPct: 0.15 } },
+      },
+    ],
+  },
+
+  demon: {
+    id: "demon",
+    name: "魔族",
+    kind: "origin",
+    color: "#e0457b",
+    desc: "冥府の眷属。攻撃にもスキルにも呪いが乗る。",
+    tiers: [
+      {
+        need: 2,
+        text: "攻撃力+18% / スキル威力+15%",
+        mods: { self: { atkPct: 0.18, spellPct: 0.15 } },
+      },
+      {
+        need: 3,
+        text: "攻撃力+40% / スキル威力+35% / 開始マナ+15",
+        mods: { self: { atkPct: 0.4, spellPct: 0.35, mana: 15 } },
+      },
+    ],
+  },
+
   // ------------------------------------------------------------ 職能
   heavy: {
     id: "heavy",

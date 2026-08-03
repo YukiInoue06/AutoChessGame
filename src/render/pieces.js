@@ -344,6 +344,83 @@ function horns(g, mats, { y }) {
   }
 }
 
+// --- 獣・魔族のパーツ ---
+
+/**
+ * 四足の胴体・脚・首。獣系の土台。
+ * 原点は足元、+Z が正面。
+ */
+function quadruped(g, { body, accent }, { bodyLen = 0.44, bodyH = 0.2, legH = 0.19, slim = true } = {}) {
+  const w = slim ? 0.2 : 0.26;
+  const legT = slim ? 0.06 : 0.08;
+  // 脚（前後×左右）
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      addMesh(g, new THREE.BoxGeometry(legT, legH, legT), body, {
+        x: sx * (w / 2 - 0.01),
+        y: legH / 2,
+        z: sz * (bodyLen / 2 - 0.06),
+      });
+    }
+  }
+  // 胴
+  addMesh(g, new THREE.BoxGeometry(w, bodyH, bodyLen), body, { y: legH + bodyH / 2 });
+  // 背中の差し色
+  addMesh(g, new THREE.BoxGeometry(w * 0.5, 0.03, bodyLen * 0.8), accent, {
+    y: legH + bodyH,
+  });
+  // 首と頭
+  const neckY = legH + bodyH + 0.05;
+  addMesh(g, new THREE.BoxGeometry(w * 0.55, 0.14, 0.12), body, {
+    y: neckY,
+    z: bodyLen / 2 - 0.06,
+    rx: -0.3,
+  });
+  addMesh(g, new THREE.BoxGeometry(w * 0.6, 0.15, 0.17), body, {
+    y: neckY + 0.11,
+    z: bodyLen / 2 - 0.02,
+  });
+  return { headY: neckY + 0.11, headZ: bodyLen / 2 - 0.02, backY: legH + bodyH };
+}
+
+/** 鼻面（獣の顔の先） */
+function muzzle(g, { accent }, { y, z, len = 0.13, r = 0.055 }) {
+  addMesh(g, new THREE.CylinderGeometry(r * 0.7, r, len, 6), accent, {
+    y,
+    z: z + len / 2,
+    rx: Math.PI / 2,
+  });
+}
+
+/** 尻尾 */
+function tail(g, { accent }, { y, z, len = 0.2, tilt = -0.6 }) {
+  addMesh(g, new THREE.CylinderGeometry(0.02, 0.045, len, 5), accent, {
+    y: y + len * 0.25,
+    z,
+    rx: tilt,
+  });
+}
+
+/** 蝙蝠の翼（魔族） */
+function batWings(g, { accent }, { y, span = 0.3, tilt = 0.5 }) {
+  for (const sx of [-1, 1]) {
+    addMesh(g, new THREE.BoxGeometry(span, 0.035, 0.22), accent, {
+      x: sx * (span / 2 + 0.08),
+      y,
+      z: -0.1,
+      rz: sx * tilt,
+      ry: sx * 0.3,
+    });
+    // 翼の骨
+    addMesh(g, new THREE.BoxGeometry(span * 0.9, 0.02, 0.02), accent, {
+      x: sx * (span / 2 + 0.08),
+      y: y + 0.05,
+      z: -0.06,
+      rz: sx * tilt,
+    });
+  }
+}
+
 /** ジョブごとのモデル定義 */
 const JOB_BUILDERS = {
   warrior(g, m) {
@@ -525,6 +602,94 @@ const JOB_BUILDERS = {
     addMesh(g, new THREE.BoxGeometry(0.05, 0.32, 0.23), m.accent, { x: -0.27, y: 0.47 });
   },
 
+  // ------------------------------------------------------------ 獣（四足）
+  wolf(g, m) {
+    const f = quadruped(g, m, { bodyLen: 0.44, bodyH: 0.17, legH: 0.2, slim: true });
+    // 尖った耳と細い鼻面
+    muzzle(g, m, { y: f.headY - 0.01, z: f.headZ + 0.07, len: 0.14 });
+    for (const sx of [-1, 1]) {
+      addMesh(g, new THREE.ConeGeometry(0.045, 0.11, 4), m.accent, {
+        x: sx * 0.06,
+        y: f.headY + 0.11,
+        z: f.headZ - 0.02,
+      });
+    }
+    tail(g, m, { y: f.backY - 0.04, z: -0.26, len: 0.2, tilt: -0.5 });
+  },
+
+  bear(g, m) {
+    const f = quadruped(g, m, { bodyLen: 0.46, bodyH: 0.26, legH: 0.17, slim: false });
+    muzzle(g, m, { y: f.headY - 0.02, z: f.headZ + 0.07, len: 0.11, r: 0.07 });
+    // 丸い耳
+    for (const sx of [-1, 1]) {
+      addMesh(g, new THREE.SphereGeometry(0.055, 10, 8), m.accent, {
+        x: sx * 0.09,
+        y: f.headY + 0.09,
+        z: f.headZ - 0.04,
+      });
+    }
+    // 肩の盛り上がり
+    addMesh(g, new THREE.SphereGeometry(0.12, 10, 8), m.body, { y: f.backY, z: -0.04 });
+  },
+
+  griffon(g, m) {
+    const f = quadruped(g, m, { bodyLen: 0.4, bodyH: 0.19, legH: 0.19, slim: true });
+    // 鷲の頭
+    addMesh(g, new THREE.SphereGeometry(0.1, 10, 8), m.accent, { y: f.headY, z: f.headZ });
+    addMesh(g, new THREE.ConeGeometry(0.045, 0.13, 6), m.body, {
+      y: f.headY - 0.02,
+      z: f.headZ + 0.11,
+      rx: Math.PI / 2,
+    });
+    // 広げた翼
+    for (const sx of [-1, 1]) {
+      addMesh(g, new THREE.BoxGeometry(0.3, 0.04, 0.18), m.accent, {
+        x: sx * 0.24,
+        y: f.backY + 0.02,
+        z: -0.04,
+        rz: sx * 0.5,
+        ry: sx * 0.25,
+      });
+    }
+    tail(g, m, { y: f.backY - 0.04, z: -0.24, len: 0.16, tilt: -0.9 });
+  },
+
+  // ------------------------------------------------------------ 魔族（人型）
+  imp(g, m) {
+    // 小柄。頭が大きく、羽と尻尾がある
+    addMesh(g, new THREE.CylinderGeometry(0.22, 0.25, 0.06, 6), m.body, { y: 0.03 });
+    addMesh(g, new THREE.CylinderGeometry(0.13, 0.19, 0.2, 6), m.body, { y: 0.16 });
+    addMesh(g, new THREE.BoxGeometry(0.22, 0.18, 0.15), m.body, { y: 0.35 });
+    addMesh(g, new THREE.DodecahedronGeometry(0.115), m.accent, { y: 0.55 });
+    horns(g, m, { y: 0.55 });
+    batWings(g, m, { y: 0.4, span: 0.2, tilt: 0.7 });
+    tail(g, m, { y: 0.22, z: -0.16, len: 0.16, tilt: -0.7 });
+  },
+
+  succubus(g, m) {
+    const f = figure(g, m, { skirt: 0.3 });
+    horns(g, m, { y: f.headY });
+    batWings(g, m, { y: f.shoulderY - 0.02, span: 0.3, tilt: 0.45 });
+    tail(g, m, { y: 0.22, z: -0.2, len: 0.22, tilt: -0.6 });
+  },
+
+  demonlord(g, m) {
+    const f = figure(g, m, { skirt: 0.34, cape: true });
+    // 大きく反った角
+    for (const sx of [-1, 1]) {
+      addMesh(g, new THREE.ConeGeometry(0.05, 0.24, 5), m.accent, {
+        x: sx * 0.1,
+        y: f.headY + 0.15,
+        rz: sx * 0.7,
+      });
+    }
+    batWings(g, m, { y: f.shoulderY, span: 0.4, tilt: 0.35 });
+    // 大剣
+    addMesh(g, new THREE.BoxGeometry(0.07, 0.56, 0.03), m.accent, { x: 0.27, y: 0.72 });
+    addMesh(g, new THREE.BoxGeometry(0.2, 0.04, 0.06), m.body, { x: 0.27, y: 0.44 });
+    tail(g, m, { y: 0.26, z: -0.22, len: 0.24, tilt: -0.5 });
+  },
+
   golem(g, m) {
     // 人型だが石の塊。手足が太い
     addMesh(g, new THREE.CylinderGeometry(0.31, 0.34, 0.08, 6), m.body, { y: 0.04 });
@@ -628,6 +793,12 @@ export const PIECE_HEIGHT = {
   bard: 1.02,
   icemage: 1.1,
   guardian: 1.06,
+  wolf: 0.7,
+  bear: 0.75,
+  griffon: 0.72,
+  imp: 0.72,
+  succubus: 1.02,
+  demonlord: 1.14,
   golem: 0.9,
 };
 

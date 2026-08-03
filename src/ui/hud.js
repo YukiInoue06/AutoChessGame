@@ -8,10 +8,11 @@
 import {
   STAT_MAX,
   UNIT_TYPES,
-  CHESS_IDS,
-  JOB_IDS,
+  UNIT_IDS,
   buildStats,
   cssColorOf,
+  rarityInfo,
+  rarityOf,
 } from "../core/units.js";
 import { TRAITS, activeTraits } from "../core/traits.js";
 import {
@@ -161,6 +162,7 @@ export class Hud {
     const t = UNIT_TYPES[typeId];
     const s = buildStats(typeId, { star, power });
     const hue = cssColorOf(typeId);
+    const rar = rarityOf(typeId);
 
     const rows = [
       ["HP", s.maxHp],
@@ -174,6 +176,8 @@ export class Hud {
     // 相手のコマは買えるものではないので、値札は出さない
     const foe = place === "敵";
 
+    this._sheet.style.setProperty("--rarity", rar.color);
+    this._sheet.dataset.rarity = rar.id;
     this._sheet.innerHTML = `
       <div class="unitsheet__head">
         <span class="unitsheet__glyph" style="color:${hue};box-shadow:inset 0 0 0 2px ${hue}55">${
@@ -183,9 +187,13 @@ export class Hud {
           <div class="unitsheet__name"${foe ? ' style="color:#ff6b6b"' : ""}>${t.name}${
             star > 1 ? ` <span class="unitsheet__stars">${"★".repeat(star)}</span>` : ""
           }</div>
-          <div class="unitsheet__role">${t.role}${place ? ` ・ ${place}` : ""}</div>
+          <div class="unitsheet__role">
+            <span class="unitsheet__rarity">${rar.name}</span> ・ ${t.role}${
+              place ? ` ・ ${place}` : ""
+            }
+          </div>
         </div>
-        ${foe ? "" : `<span class="unitsheet__cost" data-tier="${t.cost}">${t.cost}G</span>`}
+        ${foe ? "" : `<span class="unitsheet__cost">${t.cost}G</span>`}
       </div>
       <div class="unitsheet__traits">${traitChips(t.traits)}</div>
       <dl class="unitsheet__stats">
@@ -308,7 +316,7 @@ export class Hud {
       .join("");
 
     // その特性を持つユニット。盤に出ているものは色付きで示す
-    const members = [...CHESS_IDS, ...JOB_IDS]
+    const members = UNIT_IDS
       .filter((uid) => UNIT_TYPES[uid].traits?.includes(id))
       .map((uid) => {
         const on = have.has(uid);
@@ -958,11 +966,13 @@ export class Hud {
           ? `${Math.min(100, (game.xp / need) * 100)}%`
           : "100%";
         p.querySelector("#shopOdds").innerHTML = shopOddsFor(game.level)
-          .map(
-            (pct, i) =>
+          .map((pct, i) => {
+            const r = rarityInfo(i + 1);
+            return (
               `<span class="odds ${pct === 0 ? "odds--zero" : ""}">` +
-              `<b>${i + 1}</b>コスト ${pct}%</span>`,
-          )
+              `<b style="color:${r.color}">${r.name}</b> ${pct}%</span>`
+            );
+          })
           .join("");
         p.querySelector("#shopSlotsHead").textContent = this.isNarrow
           ? "品揃え — タップで詳細"
@@ -1138,15 +1148,21 @@ export class Hud {
     }
     card.dataset.id = typeId;
     if (shop) {
-      badge += `<span class="card__cost" data-tier="${t.cost}">${t.cost}G</span>`;
+      badge += `<span class="card__cost">${t.cost}G</span>`;
       if (place) badge += `<span class="card__place">${place}</span>`;
     }
-    card.title = `${t.name}（${t.role}）\n移動: ${t.moveText}\n${t.skill.name}: ${t.skill.text}`;
+    const rar = rarityOf(typeId);
+    card.title =
+      `${t.name}（${rar.name} / ${t.role}）\n移動: ${t.moveText}\n${t.skill.name}: ${t.skill.text}`;
     const hue = cssColorOf(typeId);
     card.style.setProperty("--hue", hue);
+    // 縁の色はレアリティ。中の差し色（--hue）は種類の識別用で別もの
+    card.style.setProperty("--rarity", rar.color);
+    card.dataset.rarity = rar.id;
     card.innerHTML = `
       <div class="card__glyph" style="color:${hue}">${dark ? t.glyphDark : t.glyph}</div>
       <div class="card__name">${t.name}${star > 1 ? ` <span style="color:#f5c451">${"★".repeat(star)}</span>` : ""}</div>
+      <div class="card__rarity">${rar.name}</div>
       <div class="card__role">${t.role}</div>
       <div class="card__traits">${traitChips(t.traits)}</div>
       <div class="card__bars">
