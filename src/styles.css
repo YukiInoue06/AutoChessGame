@@ -1307,3 +1307,9 @@ kbd {
   .shop__buttons .btn { flex: 1 1 0; }
   .overlay h3 { margin: 18px 0 8px; font-size: 12px; }
 }
+
+/* 選んだ定跡の一覧（押せないカードとして並べる） */
+.openings--taken { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.opening--static { cursor: default; }
+.opening--static:hover { transform: none; border-color: var(--line); background: rgba(255, 255, 255, 0.05); }
+.opening--static .opening__effects { margin-top: 9px; padding-top: 9px; }

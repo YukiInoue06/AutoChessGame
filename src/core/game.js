@@ -5,6 +5,12 @@
 
 import { UNIT_IDS, UNIT_TYPES } from "./units.js";
 import { BENCH_ROW, BENCH_SIZE, ENEMY_ROWS, PLAYER_ROWS, SIZE } from "./board.js";
+import {
+  OPENING_CHOICES,
+  OPENING_REROLLS,
+  OPENING_ROUNDS,
+  drawOpenings,
+} from "./openings.js";
 
 export const Phase = {
   SELECT: "select",
@@ -139,8 +145,12 @@ export class Game {
     this.xp = 0;
     this.phase = Phase.SELECT;
     this._nextId = 1;
-    /** 選んだオープニング。決まるまでは null（＝修正なし） */
-    this.opening = null;
+    /** 選んだ定跡。区切りごとに増えていく */
+    this.openings = [];
+    /** ラン全体で使える候補の引き直し回数 */
+    this.openingRerolls = OPENING_REROLLS;
+    /** いま提示している候補 */
+    this.openingChoices = [];
     this.life = START_LIFE;
     this.gold = START_GOLD;
     this.level = START_LEVEL;
@@ -157,45 +167,86 @@ export class Game {
     this.rollShop();
   }
 
-  // ------------------------------------------------------- オープニング
+  // ------------------------------------------------------- 定跡
 
   /**
-   * オープニングを適用する。ラン開始時に一度だけ呼ぶ。
-   * 開始値そのものを書き換えるので、reset() の直後に呼ぶこと。
+   * 定跡を1つ取る。ラン開始時と、区切りのラウンドで呼ぶ。
+   * 一度きりの効果（ゴールド・ライフ・レベル・ユニット）はその場で反映し、
+   * ずっと効くものは openings に貯めてゲッターから合算して読む。
    */
-  applyOpening(opening) {
-    this.opening = opening ?? null;
-    const m = opening?.mods ?? {};
-    this.gold = Math.max(0, START_GOLD + (m.gold ?? 0));
-    this.life = Math.max(1, START_LIFE + (m.life ?? 0));
-    this.level = Math.min(MAX_LEVEL, Math.max(1, START_LEVEL + (m.level ?? 0)));
-    for (const typeId of opening?.units ?? []) this.grantUnit(typeId);
-    this.rollShop();
+  addOpening(opening) {
+    if (!opening) return;
+    const m = opening.mods ?? {};
+    if (m.gold) this.gold = Math.max(0, this.gold + m.gold);
+    if (m.life) this.life = Math.max(1, this.life + m.life);
+    if (m.level) {
+      this.level = Math.min(MAX_LEVEL, Math.max(1, this.level + m.level));
+      if (this.level >= MAX_LEVEL) this.xp = 0;
+    }
+    this.openings.push(opening);
+    for (const typeId of opening.units ?? []) this.grantUnit(typeId);
+    this.openingChoices = [];
+    this.rollShop(); // 枠数が変わることがある
   }
 
-  /** 特性の種類数にかかる下駄（オープニング） */
+  /** まだ取っていない区切りが来ているか */
+  get needsOpening() {
+    const due = OPENING_ROUNDS.filter((r) => r <= this.round).length;
+    return this.openings.length < due;
+  }
+
+  /** 候補を引き直して返す（提示のたびに呼ぶ） */
+  drawOpeningChoices() {
+    this.openingChoices = drawOpenings(OPENING_CHOICES, this.openings);
+    return this.openingChoices;
+  }
+
+  /** 回数を消費して候補を引き直す */
+  rerollOpeningChoices() {
+    if (this.openingRerolls <= 0) {
+      return { ok: false, reason: "引き直しはもう使えません" };
+    }
+    this.openingRerolls -= 1;
+    return { ok: true, choices: this.drawOpeningChoices(), left: this.openingRerolls };
+  }
+
+  /** 選んだ定跡の mods を合算する */
+  _openingSum(key) {
+    return this.openings.reduce((a, o) => a + (o.mods?.[key] ?? 0), 0);
+  }
+
+  /** 特性の種類数にかかる下駄（選んだ定跡ぶんの合計） */
   get traitBonus() {
-    return this.opening?.traitBonus ?? null;
+    const out = {};
+    for (const o of this.openings) {
+      for (const [k, v] of Object.entries(o.traitBonus ?? {})) out[k] = (out[k] ?? 0) + v;
+    }
+    return Object.keys(out).length ? out : null;
   }
 
   get rerollCost() {
-    return Math.max(1, REROLL_COST + (this.opening?.mods?.rerollCost ?? 0));
+    return Math.max(1, REROLL_COST + this._openingSum("rerollCost"));
   }
 
   get shopSlots() {
-    return Math.max(1, SHOP_SLOTS + (this.opening?.mods?.shopSlots ?? 0));
+    return Math.max(1, SHOP_SLOTS + this._openingSum("shopSlots"));
   }
 
   get xpPerRound() {
-    return Math.max(0, XP_PER_ROUND + (this.opening?.mods?.xpPerRound ?? 0));
+    return Math.max(0, XP_PER_ROUND + this._openingSum("xpPerRound"));
   }
 
   get incomeBase() {
-    return Math.max(0, INCOME_BASE + (this.opening?.mods?.income ?? 0));
+    return Math.max(0, INCOME_BASE + this._openingSum("income"));
   }
 
   get incomeWin() {
-    return Math.max(0, INCOME_WIN + (this.opening?.mods?.winIncome ?? 0));
+    return Math.max(0, INCOME_WIN + this._openingSum("winIncome"));
+  }
+
+  /** 相手の強さにかかる倍率 */
+  get enemyPowerMul() {
+    return Math.max(0.5, 1 + this._openingSum("enemyPower"));
   }
 
   /** ゴールドを介さずにユニットを1体渡す（オープニングの開幕ユニット） */
@@ -605,6 +656,7 @@ export class Game {
     // ペース（1勝で1体）に合わせて遅らせておく。
     const star = this.round >= 22 ? 3 : this.round >= 13 ? 2 : 1;
     if (star > 1) power /= Math.pow(1.35, star - 1); // ★の跳ね上がりを一部相殺
+    power *= this.enemyPowerMul; // 定跡で相手を弱められる
 
     const cols = [3, 4, 2, 5, 1, 6, 0, 7];
     let rangedI = 0;

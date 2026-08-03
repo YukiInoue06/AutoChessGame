@@ -666,48 +666,86 @@ export class Hud {
    * @param {object[]} choices openings.js の定義
    * @returns {Promise<object>} 選んだもの
    */
-  showOpeningSelect(choices) {
+  showOpeningSelect({ choices, first = false, taken = [], rerollsLeft = 0, onReroll }) {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
-        <h2>開幕の定跡を選ぶ</h2>
-        <p>ラン全体に効きます。あとから変えられません。</p>
+        <h2>${first ? "開幕の定跡を選ぶ" : "定跡を1つ足す"}</h2>
+        <p>
+          ${
+            first
+              ? "ラン全体に効きます。あとから変えられません。"
+              : "これまでに選んだものへ積み重なります。あとから変えられません。"
+          }
+        </p>
+        ${
+          taken.length
+            ? `<p class="shop__hint">いま効いている定跡: ${taken
+                .map((o) => `<b>${o.name}</b>`)
+                .join(" ／ ")}</p>`
+            : ""
+        }
         <div class="openings" id="openingList"></div>
         <div class="overlay__actions">
-          <span class="overlay__note">選ぶとゲームが始まります</span>
+          <span class="overlay__note" id="openingNote"></span>
+          <button class="btn" data-act="reroll" id="openingReroll"></button>
         </div>
       `);
 
       const box = p.querySelector("#openingList");
-      for (const o of choices) {
-        const card = document.createElement("button");
-        card.type = "button";
-        card.className = "opening";
-        card.innerHTML = `
-          <div class="opening__name">${o.name}</div>
-          <div class="opening__en">${o.en}</div>
-          <p class="opening__desc">${o.desc}</p>
-          <ul class="opening__effects">
-            ${o.effects.map((t) => `<li>${t}</li>`).join("")}
-          </ul>
-        `;
-        this._on(card, "click", () => {
-          this.closeOverlay();
-          resolve(o);
-        });
-        box.appendChild(card);
-      }
+      const note = p.querySelector("#openingNote");
+      const rerollBtn = p.querySelector("#openingReroll");
+      let left = rerollsLeft;
+
+      const render = (list) => {
+        box.replaceChildren();
+        for (const o of list) {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "opening";
+          card.innerHTML = `
+            <div class="opening__name">${o.name}</div>
+            <div class="opening__en">${o.en}</div>
+            <p class="opening__desc">${o.desc}</p>
+            <ul class="opening__effects">
+              ${o.effects.map((t) => `<li>${t}</li>`).join("")}
+            </ul>
+          `;
+          this._on(card, "click", () => {
+            this.closeOverlay();
+            resolve(o);
+          });
+          box.appendChild(card);
+        }
+        rerollBtn.textContent = `候補を引き直す（残り ${left}回）`;
+        rerollBtn.disabled = left <= 0;
+        note.textContent = first ? "選ぶとゲームが始まります" : "選ぶと準備フェーズに戻ります";
+      };
+
+      this._on(rerollBtn, "click", () => {
+        const res = onReroll?.();
+        if (!res?.ok) {
+          this.toast(res?.reason ?? "引き直せません");
+          return;
+        }
+        left = res.left;
+        render(res.choices);
+      });
+
+      render(choices);
     });
   }
 
-  /** いま選んでいる定跡をヘッダーに出す。押すと効果を出す */
-  setOpening(opening) {
+  /** いま効いている定跡をヘッダーに出す。押すと効果を出す */
+  setOpenings(list) {
     const el = this.el.opening;
     if (!el) return;
-    this._opening = opening;
-    el.hidden = !opening;
-    if (!opening) return;
-    el.textContent = opening.name;
-    el.title = `${opening.name} — クリックで効果を表示`;
+    this._openings = list ?? [];
+    el.hidden = !this._openings.length;
+    if (!this._openings.length) return;
+    const last = this._openings[this._openings.length - 1];
+    el.textContent =
+      this._openings.length > 1 ? `${last.name} +${this._openings.length - 1}` : last.name;
+    el.title = `定跡 ${this._openings.length}個 — クリックで効果を表示`;
     if (!el.dataset.wired) {
       el.dataset.wired = "1";
       el.addEventListener("click", () => this.showOpeningInfo());
@@ -716,17 +754,27 @@ export class Hud {
 
   /** 選んだ定跡の効果を見返す */
   showOpeningInfo() {
-    const o = this._opening;
-    if (!o) return;
+    const list = this._openings ?? [];
+    if (!list.length) return;
     const p = this._openOverlay(`
       <div class="shop__head">
-        <h2>${o.name}</h2>
-        <p class="shop__sub">${o.en}</p>
+        <h2>いま効いている定跡</h2>
+        <p class="shop__sub">${list.length}個</p>
       </div>
-      <p>${o.desc}</p>
-      <ul class="opening__effects opening__effects--solo">
-        ${o.effects.map((t) => `<li>${t}</li>`).join("")}
-      </ul>
+      <div class="openings openings--taken">
+        ${list
+          .map(
+            (o) => `
+          <div class="opening opening--static">
+            <div class="opening__name">${o.name}</div>
+            <div class="opening__en">${o.en}</div>
+            <ul class="opening__effects">
+              ${o.effects.map((t) => `<li>${t}</li>`).join("")}
+            </ul>
+          </div>`,
+          )
+          .join("")}
+      </div>
       <p class="shop__hint">定跡はラン中ずっと効いていて、途中で変えることはできません。</p>
       <div class="overlay__actions">
         <button class="btn btn--primary" data-act="close">閉じる</button>
@@ -760,10 +808,12 @@ export class Hud {
         <li>控えに置いたユニットは戦闘に出ませんが、合成の数には入ります</li>
         <li>収入はラウンドごとに基本10G＋勝利4G＋連勝ボーナス（最大5G）</li>
       </ul>
-      <h3>オープニング（開幕定跡）</h3>
+      <h3>定跡</h3>
       <ul class="helplist">
-        <li>ランの最初に<b>定跡を1つ</b>選びます。ラン全体に効き、途中では変えられません</li>
-        <li>開始ゴールドやライフ、リロールの値段、開幕のユニットなどが変わります</li>
+        <li>ランの最初と、<b>ラウンド6 / 12 / 18</b> の区切りで、3つの候補から1つ選びます</li>
+        <li>選んだものは<b>積み上がって</b>ラン中ずっと効きます。途中で捨てることはできません</li>
+        <li>候補は<b>ラン全体で2回まで引き直せます</b>。一度取った定跡は候補に出ません</li>
+        <li>ゴールドやライフ、リロールの値段、ショップの枠、相手の強さなどが変わります</li>
         <li>特性の<b>種類数に下駄</b>をはかせる定跡もあります（ユニットが0体でも1種として数えます）</li>
         <li>効果を見返したいときは、画面上のヘッダーにある定跡名を押してください</li>
       </ul>

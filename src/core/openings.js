@@ -1,22 +1,32 @@
 /**
- * オープニング（開幕定跡）。
+ * 定跡。
  *
- * ラン開始時にひとつ選ぶと、そのラン中ずっと効く修正がかかる。
- * 毎回まったく同じ立ち上がりになるのを避けるための仕掛け。
+ * ラン開始時と、決められたラウンドの区切りでひとつずつ選ぶ。
+ * 選んだものは積み上がり、そのラン中ずっと効き続ける。
  *
  * mods の項目（省略したものは0扱い）:
- *   gold        開始ゴールド
- *   life        開始ライフ
- *   level       開始レベル
- *   income      毎ラウンドの基本収入
- *   winIncome   勝利ボーナス
- *   xpPerRound  ラウンドごとに自動でもらえる経験値
- *   rerollCost  リロールの値段（1G未満にはならない）
- *   shopSlots   ショップの枠数
+ *   一度きり（選んだ瞬間に反映）
+ *     gold        ゴールド
+ *     life        ライフ
+ *     level       レベル
+ *   ずっと効く（選んだぶんを合算して読む）
+ *     income      毎ラウンドの基本収入
+ *     winIncome   勝利ボーナス
+ *     xpPerRound  ラウンドごとに自動でもらえる経験値
+ *     rerollCost  ショップのリロール代（1G未満にはならない）
+ *     shopSlots   ショップの枠数
+ *     enemyPower  相手の強さの倍率に足す値（-0.06 なら 6% 弱くなる）
  *
- * units      … 開幕から持っているユニット
+ * units      … 選んだ時点でもらえるユニット
  * traitBonus … 特性の種類数に下駄をはかせる（{ mage: 1 } なら術士を1種多く数える）
  */
+
+/** 定跡を選べるラウンド。1 はラン開始時 */
+export const OPENING_ROUNDS = [1, 6, 12, 18];
+/** 1回に提示する候補の数 */
+export const OPENING_CHOICES = 3;
+/** ラン全体で使える引き直しの回数 */
+export const OPENING_REROLLS = 2;
 
 export const OPENINGS = [
   {
@@ -31,9 +41,9 @@ export const OPENINGS = [
     id: "queensGambit",
     name: "クイーンズ・ギャンビット",
     en: "Queen's Gambit",
-    desc: "駒を捨てて先手を取る。序盤に賭ける定跡。",
+    desc: "駒を捨てて先手を取る。目先に賭ける定跡。",
     mods: { gold: 16, income: -1 },
-    effects: ["開始ゴールド +16", "毎ラウンドの収入 -1G"],
+    effects: ["ゴールド +16", "毎ラウンドの収入 -1G"],
   },
   {
     id: "ruyLopez",
@@ -43,15 +53,15 @@ export const OPENINGS = [
     mods: {},
     units: ["bishop"],
     traitBonus: { mage: 1 },
-    effects: ["開幕にビショップ1体", "「術士」を1種多く数える"],
+    effects: ["ビショップ1体", "「術士」を1種多く数える"],
   },
   {
     id: "kingsIndian",
     name: "キングズ・インディアン",
     en: "King's Indian Defence",
-    desc: "陣を敷いてから反撃する。人数で押す立ち上がり。",
+    desc: "陣を敷いてから反撃する。人数で押す。",
     mods: { level: 1, gold: -3 },
-    effects: ["開始レベル +1（4体出せる）", "開始ゴールド -3"],
+    effects: ["レベル +1（出せる人数 +1）", "ゴールド -3"],
   },
   {
     id: "italian",
@@ -59,7 +69,7 @@ export const OPENINGS = [
     en: "Italian Game",
     desc: "素早く駒を展開する。引き直しが軽い。",
     mods: { rerollCost: -1, winIncome: 2 },
-    effects: ["リロールが 1G", "勝利ボーナス +2G"],
+    effects: ["リロール -1G", "勝利ボーナス +2G"],
   },
   {
     id: "alekhine",
@@ -69,21 +79,82 @@ export const OPENINGS = [
     mods: { xpPerRound: 1, gold: 2 },
     units: ["knight"],
     traitBonus: { swift: 1 },
-    effects: ["開幕にナイト1体", "「速攻」を1種多く数える", "毎ラウンドの経験値 +1"],
+    effects: ["ナイト1体", "「速攻」を1種多く数える", "毎ラウンドの経験値 +1"],
+  },
+
+  // ------------------------------------------------ 中盤以降でも噛み合うもの
+  {
+    id: "pawnStorm",
+    name: "ポーンストーム",
+    en: "Pawn Storm",
+    desc: "歩兵の波で押し潰す。数がそろうほど硬くなる。",
+    mods: {},
+    units: ["pawn"],
+    traitBonus: { chess: 1 },
+    effects: ["ポーン1体", "「チェス」を1種多く数える"],
+  },
+  {
+    id: "fianchetto",
+    name: "フィアンケット",
+    en: "Fianchetto",
+    desc: "長い斜めに睨みを利かせ、後ろから支える。",
+    mods: { income: 1 },
+    traitBonus: { support: 1 },
+    effects: ["「支援」を1種多く数える", "毎ラウンドの収入 +1G"],
+  },
+  {
+    id: "rookLift",
+    name: "ルーク・リフト",
+    en: "Rook Lift",
+    desc: "重い駒を前線へ持ち上げる。壁を厚くする。",
+    mods: {},
+    units: ["rook"],
+    traitBonus: { heavy: 1 },
+    effects: ["ルーク1体", "「重装」を1種多く数える"],
+  },
+  {
+    id: "openFile",
+    name: "オープンファイル",
+    en: "Open File",
+    desc: "空いた筋を通す。遠くから撃ち抜く布陣。",
+    mods: { winIncome: 2 },
+    traitBonus: { ranger: 1 },
+    effects: ["「射手」を1種多く数える", "勝利ボーナス +2G"],
+  },
+  {
+    id: "zugzwang",
+    name: "ツークツワンク",
+    en: "Zugzwang",
+    desc: "動くほど不利になる形へ追い込む。相手の力を削ぐ。",
+    mods: { enemyPower: -0.06 },
+    effects: ["相手の強さ -6%"],
+  },
+  {
+    id: "promotion",
+    name: "プロモーション",
+    en: "Promotion",
+    desc: "成る手を狙い続ける。選択肢そのものを増やす。",
+    mods: { shopSlots: 1 },
+    effects: ["ショップの枠 +1（6枠）"],
   },
 ];
 
 export const OPENING_BY_ID = Object.fromEntries(OPENINGS.map((o) => [o.id, o]));
 
-/** 選択肢として出す数 */
-export const OPENING_CHOICES = 3;
-
-/** ランのはじめに提示する候補をランダムに選ぶ */
-export function drawOpenings(n = OPENING_CHOICES) {
-  const pool = [...OPENINGS];
+/**
+ * 候補をランダムに引く。すでに選んだものは出さない。
+ * @param {number} n
+ * @param {{id:string}[]} taken すでに選んだ定跡
+ */
+export function drawOpenings(n = OPENING_CHOICES, taken = []) {
+  const used = new Set(taken.map((o) => o.id));
+  const pool = OPENINGS.filter((o) => !used.has(o.id));
   const out = [];
   while (out.length < n && pool.length) {
     out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
   return out;
 }
+
+/** そのラウンドが定跡を選べる区切りか */
+export const isOpeningRound = (round) => OPENING_ROUNDS.includes(round);

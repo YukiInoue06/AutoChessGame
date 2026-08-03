@@ -13,7 +13,7 @@ import { DamageType, UNIT_TYPES } from "./core/units.js";
 import { PlacementController, isDeployTile } from "./input/placement.js";
 import { isBenchTile } from "./core/board.js";
 import { activeTraits } from "./core/traits.js";
-import { drawOpenings } from "./core/openings.js";
+
 import { Hud } from "./ui/hud.js";
 
 const SPEEDS = [1, 1.5, 2, 3];
@@ -205,13 +205,42 @@ function buildBattle() {
   });
 }
 
-function enterPrep() {
+/**
+ * 定跡を1つ選ばせる。
+ * ラン開始時と、区切りのラウンド（openings.js の OPENING_ROUNDS）で呼ぶ。
+ */
+async function pickOpening({ first = false } = {}) {
+  const chosen = await hud.showOpeningSelect({
+    first,
+    choices: game.drawOpeningChoices(),
+    taken: game.openings,
+    rerollsLeft: game.openingRerolls,
+    onReroll: () => game.rerollOpeningChoices(),
+  });
+  game.addOpening(chosen);
+  hud.setOpenings(game.openings);
+  hud.setStats(game);
+  return chosen;
+}
+
+async function enterPrep() {
   phase = Phase.PREP;
   game.phase = Phase.PREP;
+
+  // 区切りのラウンドに来ていたら、盤を組む前に定跡を1つ足す
+  let added = null;
+  if (game.needsOpening) {
+    busy = true;
+    added = await pickOpening();
+    busy = false;
+  }
+
   wave = game.buildEnemyWave();
   setupPrep();
   hud.setPhase(phase);
   hud.clearLog();
+  // ログは clearLog のあとに出す（先に出すと消えてしまう）
+  if (added) hud.log(`<em>定跡</em> — <b class="ally">${added.name}</b> を選んだ`);
   refreshPrepUI();
   placement.setActive(true);
   hud.announce(`ラウンド ${game.round}`, "info");
@@ -571,7 +600,7 @@ async function onBattleEnd(winner) {
   });
 
   busy = false;
-  enterPrep();
+  await enterPrep();
   if (res.action === "shop") await openShop();
 }
 
@@ -593,14 +622,12 @@ async function startNewRun() {
   placement.setActive(false);
 
   // 開幕の定跡を選ぶ。開始値そのものが変わるので、盤を組む前に決める
-  game.applyOpening(await hud.showOpeningSelect(drawOpenings()));
-  hud.setOpening(game.opening);
-  hud.setStats(game);
+  await pickOpening({ first: true });
 
   wave = game.buildEnemyWave();
   setupPrep();
   await openShop({ first: true });
-  enterPrep();
+  await enterPrep();
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
