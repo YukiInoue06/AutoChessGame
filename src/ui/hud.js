@@ -642,7 +642,7 @@ export class Hud {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <h1 class="title">AUTO CHESS ARENA</h1>
-        <p class="subtitle">チェス盤オートバトル ・ 全20種</p>
+        <p class="subtitle">チェス盤オートバトル ・ 全26種</p>
         <p>
           ショップでユニットを雇い、盤に並べて、あとは見守るだけ。
           コマは<b>それぞれの動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
@@ -650,9 +650,10 @@ export class Hud {
         <h3>ルール</h3>
         <ol class="helplist">
           <li><b>ショップ</b> — 5枠の品揃えから雇う。リロールで引き直せる</li>
-          <li><b>レベル</b> — 盤に出せる人数＝レベル。経験値で上がり、高コストも出やすくなる</li>
+          <li><b>レベル</b> — 盤に出せる人数＝レベル。経験値で上がり、上位レアリティも出やすくなる</li>
           <li><b>合成</b> — 同じユニットが3体そろうと自動で★アップ</li>
           <li><b>特性</b> — 盤の顔ぶれでバフが発動。左のパネルの特性名を押すと効果が出る</li>
+          <li><b>定跡</b> — 開幕と R6/R12/R18 で1つ選ぶ。ラン全体に効き、積み重なる</li>
           <li><b>準備</b> — 手前3列にドラッグで配置。控え列に置いた分は戦わない</li>
           <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち。負けるとライフが1減る</li>
         </ol>
@@ -674,30 +675,73 @@ export class Hud {
    * @param {object[]} choices openings.js の定義
    * @returns {Promise<object>} 選んだもの
    */
-  showOpeningSelect({ choices, first = false, taken = [], rerollsLeft = 0, onReroll }) {
+  showOpeningSelect({
+    choices,
+    first = false,
+    taken = [],
+    rerollsLeft = 0,
+    onReroll,
+    squad = [],
+    traits = [],
+  }) {
     return new Promise((resolve) => {
+      const active = traits.filter((t) => t.tier);
       const p = this._openOverlay(`
-        <h2>${first ? "開幕の定跡を選ぶ" : "定跡を1つ足す"}</h2>
-        <p>
-          ${
-            first
-              ? "ラン全体に効きます。あとから変えられません。"
-              : "これまでに選んだものへ積み重なります。あとから変えられません。"
-          }
-        </p>
+        <div class="shop__head">
+          <h2>${first ? "開幕の定跡" : "定跡を1つ足す"}</h2>
+          <p class="shop__sub">
+            ${first ? "ラン全体に効きます" : `いま${taken.length}個 ／ 積み重なります`}
+          </p>
+        </div>
         ${
-          taken.length
-            ? `<p class="shop__hint">いま効いている定跡: ${taken
-                .map((o) => `<b>${o.name}</b>`)
-                .join(" ／ ")}</p>`
-            : ""
+          // 初回は手持ちが無いので出さない。以降は空でも出して現状が分かるようにする
+          first && !squad.length && !active.length
+            ? ""
+            : `<div class="pickstate">
+                 <div class="pickstate__row" id="pickUnits"></div>
+                 <div class="pickstate__row" id="pickTraits"></div>
+               </div>`
         }
-        <div class="openings" id="openingList"></div>
+        <div class="openings openings--pick" id="openingList"></div>
         <div class="overlay__actions">
-          <span class="overlay__note" id="openingNote"></span>
+          <span class="overlay__note" id="openingNote">タップで詳細</span>
           <button class="btn" data-act="reroll" id="openingReroll"></button>
         </div>
       `);
+
+      // --- いまの編成（これを見て定跡を選べるように）
+      const unitBox = p.querySelector("#pickUnits");
+      if (unitBox) {
+        if (squad.length) {
+          unitBox.innerHTML =
+            `<span class="pickstate__label">編成</span>` +
+            squad
+              .map(
+                (u) =>
+                  `<span class="pickchip" style="--hue:${cssColorOf(u.typeId)}">` +
+                  `${UNIT_TYPES[u.typeId].glyph}${UNIT_TYPES[u.typeId].name}` +
+                  `${u.star > 1 ? `<b>★${u.star}</b>` : ""}</span>`,
+              )
+              .join("");
+        } else {
+          unitBox.innerHTML = `<span class="pickstate__label">編成</span>
+            <span class="pickstate__empty">まだ1体も居ません</span>`;
+        }
+      }
+      const traitBox = p.querySelector("#pickTraits");
+      if (traitBox) {
+        traitBox.innerHTML =
+          `<span class="pickstate__label">特性</span>` +
+          (active.length
+            ? active
+                .map(
+                  (t) =>
+                    `<span class="pickchip pickchip--trait" style="--hue:${t.trait.color}">` +
+                    `${t.trait.name}<b>${t.count}</b></span>`,
+                )
+                .join("")
+            : `<span class="pickstate__empty">発動しているものはありません</span>`);
+      }
 
       const box = p.querySelector("#openingList");
       const note = p.querySelector("#openingNote");
@@ -707,26 +751,40 @@ export class Hud {
       const render = (list) => {
         box.replaceChildren();
         for (const o of list) {
-          const card = document.createElement("button");
-          card.type = "button";
-          card.className = "opening";
+          // 既定はたたんだ状態。叩くと説明と効果が開き、そこで初めて決定できる
+          const card = document.createElement("div");
+          card.className = "opening opening--fold";
+          card.dataset.open = "false";
           card.innerHTML = `
-            <div class="opening__name">${o.name}</div>
-            <div class="opening__en">${o.en}</div>
-            <p class="opening__desc">${o.desc}</p>
-            <ul class="opening__effects">
-              ${o.effects.map((t) => `<li>${t}</li>`).join("")}
-            </ul>
+            <button type="button" class="opening__head">
+              <span class="opening__id">
+                <span class="opening__name">${o.name}</span>
+                <span class="opening__en">${o.en}</span>
+              </span>
+              <span class="opening__tags">${o.effects.length}件</span>
+              <span class="opening__caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="opening__body">
+              <p class="opening__desc">${o.desc}</p>
+              <ul class="opening__effects">
+                ${o.effects.map((t) => `<li>${t}</li>`).join("")}
+              </ul>
+              <button type="button" class="btn btn--primary opening__take">この定跡にする</button>
+            </div>
           `;
-          this._on(card, "click", () => {
+          this._on(card.querySelector(".opening__head"), "click", () => {
+            const open = card.dataset.open === "true";
+            for (const c of box.children) c.dataset.open = "false";
+            card.dataset.open = open ? "false" : "true";
+          });
+          this._on(card.querySelector(".opening__take"), "click", () => {
             this.closeOverlay();
             resolve(o);
           });
           box.appendChild(card);
         }
-        rerollBtn.textContent = `候補を引き直す（残り ${left}回）`;
+        rerollBtn.textContent = `引き直す（残り${left}）`;
         rerollBtn.disabled = left <= 0;
-        note.textContent = first ? "選ぶとゲームが始まります" : "選ぶと準備フェーズに戻ります";
       };
 
       this._on(rerollBtn, "click", () => {
@@ -823,6 +881,8 @@ export class Hud {
         <li>候補は<b>ラン全体で2回まで引き直せます</b>。一度取った定跡は候補に出ません</li>
         <li>ゴールドやライフ、リロールの値段、ショップの枠、相手の強さなどが変わります</li>
         <li>特性の<b>種類数に下駄</b>をはかせる定跡もあります（ユニットが0体でも1種として数えます）</li>
+        <li>候補は<b>タップすると説明と効果が開きます</b>。開いてから「この定跡にする」で決定します</li>
+        <li>選ぶ画面には<b>いまの編成と発動中の特性</b>が出るので、噛み合うものを選べます</li>
         <li>効果を見返したいときは、画面上のヘッダーにある定跡名を押してください</li>
       </ul>
       <h3>特性（組み合わせバフ）</h3>

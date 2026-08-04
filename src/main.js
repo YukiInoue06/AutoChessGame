@@ -210,12 +210,19 @@ function buildBattle() {
  * ラン開始時と、区切りのラウンド（openings.js の OPENING_ROUNDS）で呼ぶ。
  */
 async function pickOpening({ first = false } = {}) {
+  // いまの編成と発動中の特性を渡す。噛み合う定跡を選べるようにするため
+  const squad = game.squad;
   const chosen = await hud.showOpeningSelect({
     first,
     choices: game.drawOpeningChoices(),
     taken: game.openings,
     rerollsLeft: game.openingRerolls,
     onReroll: () => game.rerollOpeningChoices(),
+    squad,
+    traits: activeTraits(
+      squad.map((u) => ({ typeId: u.typeId, def: UNIT_TYPES[u.typeId] })),
+      game.traitBonus,
+    ),
   });
   game.addOpening(chosen);
   hud.setOpenings(game.openings);
