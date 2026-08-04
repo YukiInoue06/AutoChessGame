@@ -403,17 +403,37 @@ html, body {
 
 /* --- たたんで出す形（選択画面） --- */
 .opening--fold { padding: 0; cursor: default; }
-.opening--fold:hover { transform: none; background: rgba(255, 255, 255, 0.05); border-color: var(--line); }
+/* 選択中のカードにホバーしても、選択の縁取りを消さないよう除外する */
+.opening--fold:not([data-open="true"]):hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
+}
+.opening--fold[data-open="true"]:hover { transform: none; }
+/* 選んでいるものは、その定跡の色で縁取る */
 .opening--fold[data-open="true"] {
-  border-color: #a78bfa;
-  background: rgba(167, 139, 250, 0.1);
+  border-color: var(--tint, #a78bfa);
+  background: color-mix(in srgb, var(--tint, #a78bfa) 10%, transparent);
+}
+.opening__icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+  border-radius: 9px;
+  color: var(--tint, var(--text));
+  background: color-mix(in srgb, var(--tint, var(--line)) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint, var(--line)) 45%, transparent);
 }
 .opening__head {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 11px 14px;
+  padding: 10px 12px;
   font-family: inherit;
   color: inherit;
   background: none;
@@ -435,10 +455,15 @@ html, body {
 }
 .opening__caret { flex: none; font-size: 10px; color: var(--muted); transition: transform 0.16s ease; }
 .opening--fold[data-open="true"] .opening__caret { transform: rotate(180deg); }
-.opening__body { display: none; padding: 0 14px 13px; }
+.opening__body { display: none; padding: 0 12px 12px 54px; }
 .opening--fold[data-open="true"] .opening__body { display: block; }
 .opening--fold .opening__desc { margin-top: 0; }
-.opening__take { width: 100%; margin-top: 12px; padding: 11px; font-size: 14px; }
+.opening--fold .opening__effects li::before { color: var(--tint, #a78bfa); }
+
+/* 決定ボタンは詳細の中ではなく、下のバーに置く */
+.overlay__actions--pick { gap: 10px; }
+.overlay__actions--pick .btn { flex: 1 1 auto; }
+.overlay__actions--pick .btn--primary { flex: 2 1 auto; padding: 12px 18px; font-size: 15px; }
 
 /* --- いまの編成と特性（定跡を選ぶ判断材料） --- */
 .pickstate {

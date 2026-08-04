@@ -17,6 +17,8 @@
  *     shopSlots   ショップの枠数
  *     enemyPower  相手の強さの倍率に足す値（-0.06 なら 6% 弱くなる）
  *
+ * icon       … 一覧に出す絵柄
+ * color      … 絵柄と枠の色
  * units      … 選んだ時点でもらえるユニット
  * traitBonus … 特性の種類数に下駄をはかせる（{ mage: 1 } なら術士を1種多く数える）
  */
@@ -31,6 +33,8 @@ export const OPENING_REROLLS = 2;
 export const OPENINGS = [
   {
     id: "sicilian",
+    icon: "🛡️",
+    color: "#6ee7d0",
     name: "シチリア防御",
     en: "Sicilian Defence",
     desc: "受けて勝つ。粘れるぶん、実入りは細い。",
@@ -39,6 +43,8 @@ export const OPENINGS = [
   },
   {
     id: "queensGambit",
+    icon: "🎲",
+    color: "#f5c451",
     name: "クイーンズ・ギャンビット",
     en: "Queen's Gambit",
     desc: "駒を捨てて先手を取る。目先に賭ける定跡。",
@@ -47,6 +53,8 @@ export const OPENINGS = [
   },
   {
     id: "ruyLopez",
+    icon: "♗",
+    color: "#38bdf8",
     name: "ルイ・ロペス",
     en: "Ruy López",
     desc: "ビショップを軸に組み立てる、最古の定跡のひとつ。",
@@ -57,6 +65,8 @@ export const OPENINGS = [
   },
   {
     id: "kingsIndian",
+    icon: "♔",
+    color: "#f2c14e",
     name: "キングズ・インディアン",
     en: "King's Indian Defence",
     desc: "陣を敷いてから反撃する。人数で押す。",
@@ -65,6 +75,8 @@ export const OPENINGS = [
   },
   {
     id: "italian",
+    icon: "⚡",
+    color: "#a78bfa",
     name: "イタリアン・ゲーム",
     en: "Italian Game",
     desc: "素早く駒を展開する。引き直しが軽い。",
@@ -73,6 +85,8 @@ export const OPENINGS = [
   },
   {
     id: "alekhine",
+    icon: "♘",
+    color: "#8b5cf6",
     name: "アレヒン防御",
     en: "Alekhine's Defence",
     desc: "ナイトを突き出して誘い込む。速さで撹乱する。",
@@ -85,6 +99,8 @@ export const OPENINGS = [
   // ------------------------------------------------ 中盤以降でも噛み合うもの
   {
     id: "pawnStorm",
+    icon: "♙",
+    color: "#94a3b8",
     name: "ポーンストーム",
     en: "Pawn Storm",
     desc: "歩兵の波で押し潰す。数がそろうほど硬くなる。",
@@ -95,6 +111,8 @@ export const OPENINGS = [
   },
   {
     id: "fianchetto",
+    icon: "✚",
+    color: "#6ee7a0",
     name: "フィアンケット",
     en: "Fianchetto",
     desc: "長い斜めに睨みを利かせ、後ろから支える。",
@@ -104,6 +122,8 @@ export const OPENINGS = [
   },
   {
     id: "rookLift",
+    icon: "♖",
+    color: "#c9b18a",
     name: "ルーク・リフト",
     en: "Rook Lift",
     desc: "重い駒を前線へ持ち上げる。壁を厚くする。",
@@ -114,6 +134,8 @@ export const OPENINGS = [
   },
   {
     id: "openFile",
+    icon: "🏹",
+    color: "#4ade80",
     name: "オープンファイル",
     en: "Open File",
     desc: "空いた筋を通す。遠くから撃ち抜く布陣。",
@@ -123,6 +145,8 @@ export const OPENINGS = [
   },
   {
     id: "zugzwang",
+    icon: "⛓️",
+    color: "#e0457b",
     name: "ツークツワンク",
     en: "Zugzwang",
     desc: "動くほど不利になる形へ追い込む。相手の力を削ぐ。",
@@ -131,6 +155,8 @@ export const OPENINGS = [
   },
   {
     id: "promotion",
+    icon: "♕",
+    color: "#e0348a",
     name: "プロモーション",
     en: "Promotion",
     desc: "成る手を狙い続ける。選択肢そのものを増やす。",

@@ -703,9 +703,9 @@ export class Hud {
                </div>`
         }
         <div class="openings openings--pick" id="openingList"></div>
-        <div class="overlay__actions">
-          <span class="overlay__note" id="openingNote">タップで詳細</span>
+        <div class="overlay__actions overlay__actions--pick">
           <button class="btn" data-act="reroll" id="openingReroll"></button>
+          <button class="btn btn--primary" id="openingTake" disabled>定跡を選ぶ</button>
         </div>
       `);
 
@@ -744,19 +744,31 @@ export class Hud {
       }
 
       const box = p.querySelector("#openingList");
-      const note = p.querySelector("#openingNote");
       const rerollBtn = p.querySelector("#openingReroll");
+      const takeBtn = p.querySelector("#openingTake");
       let left = rerollsLeft;
+      /** いま開いて選んでいる定跡 */
+      let chosen = null;
+
+      const setChosen = (o, card) => {
+        chosen = o;
+        for (const c of box.children) c.dataset.open = "false";
+        if (card) card.dataset.open = "true";
+        takeBtn.disabled = !o;
+        takeBtn.textContent = o ? `${o.name} にする` : "定跡を選ぶ";
+      };
 
       const render = (list) => {
         box.replaceChildren();
         for (const o of list) {
-          // 既定はたたんだ状態。叩くと説明と効果が開き、そこで初めて決定できる
+          // 既定はたたんだ状態。叩くと説明と効果が開き、決定は下のボタンで行う
           const card = document.createElement("div");
           card.className = "opening opening--fold";
           card.dataset.open = "false";
+          card.style.setProperty("--tint", o.color);
           card.innerHTML = `
             <button type="button" class="opening__head">
+              <span class="opening__icon">${o.icon}</span>
               <span class="opening__id">
                 <span class="opening__name">${o.name}</span>
                 <span class="opening__en">${o.en}</span>
@@ -769,23 +781,23 @@ export class Hud {
               <ul class="opening__effects">
                 ${o.effects.map((t) => `<li>${t}</li>`).join("")}
               </ul>
-              <button type="button" class="btn btn--primary opening__take">この定跡にする</button>
             </div>
           `;
           this._on(card.querySelector(".opening__head"), "click", () => {
-            const open = card.dataset.open === "true";
-            for (const c of box.children) c.dataset.open = "false";
-            card.dataset.open = open ? "false" : "true";
-          });
-          this._on(card.querySelector(".opening__take"), "click", () => {
-            this.closeOverlay();
-            resolve(o);
+            setChosen(card.dataset.open === "true" ? null : o, card);
           });
           box.appendChild(card);
         }
+        setChosen(null, null);
         rerollBtn.textContent = `引き直す（残り${left}）`;
         rerollBtn.disabled = left <= 0;
       };
+
+      this._on(takeBtn, "click", () => {
+        if (!chosen) return;
+        this.closeOverlay();
+        resolve(chosen);
+      });
 
       this._on(rerollBtn, "click", () => {
         const res = onReroll?.();
