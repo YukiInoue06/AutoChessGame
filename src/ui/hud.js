@@ -26,14 +26,6 @@ import {
 const $ = (id) => document.getElementById(id);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-const PHASE_LABEL = {
-  [Phase.SELECT]: "編成フェーズ",
-  [Phase.PREP]: "準備フェーズ",
-  [Phase.BATTLE]: "バトル中",
-  [Phase.RESULT]: "リザルト",
-  [Phase.GAMEOVER]: "ゲームオーバー",
-};
-
 export class Hud {
   constructor({
     onStart,
@@ -54,8 +46,6 @@ export class Hud {
       btnShop: $("btnShop"),
       btnBench: $("btnBench"),
       opening: $("statOpening"),
-      phaseBadge: $("phaseBadge"),
-      phaseText: $("phaseText"),
       actionbar: $("actionbar"),
       actionHint: $("actionHint"),
       btnStart: $("btnStart"),
@@ -513,9 +503,8 @@ export class Hud {
     }, 2200);
   }
 
+  /** 戦況ログはバトル中だけ出す */
   setPhase(phase) {
-    this.el.phaseText.textContent = PHASE_LABEL[phase] ?? phase;
-    this.el.phaseBadge.dataset.phase = phase;
     this.el.logPanel.dataset.visible = phase === Phase.BATTLE ? "true" : "false";
   }
 
@@ -821,8 +810,12 @@ export class Hud {
     el.hidden = !this._openings.length;
     if (!this._openings.length) return;
     const last = this._openings[this._openings.length - 1];
-    el.textContent =
+    const name =
       this._openings.length > 1 ? `${last.name} +${this._openings.length - 1}` : last.name;
+    // 絵柄は常に、名前は幅に余裕があるときだけ（スマホでは CSS で隠す）
+    el.innerHTML =
+      `<span class="openingtag__icon">${this._openings.map((o) => o.icon ?? "♟").join("")}</span>` +
+      `<span class="openingtag__name">${name}</span>`;
     el.title = `定跡 ${this._openings.length}個 — クリックで効果を表示`;
     if (!el.dataset.wired) {
       el.dataset.wired = "1";
@@ -895,7 +888,7 @@ export class Hud {
         <li>特性の<b>種類数に下駄</b>をはかせる定跡もあります（ユニットが0体でも1種として数えます）</li>
         <li>候補は<b>タップすると説明と効果が開きます</b>。開いてから「この定跡にする」で決定します</li>
         <li>選ぶ画面には<b>いまの編成と発動中の特性</b>が出るので、噛み合うものを選べます</li>
-        <li>効果を見返したいときは、画面上のヘッダーにある定跡名を押してください</li>
+        <li>効果を見返したいときは、画面上のヘッダーにある定跡の絵柄を押してください</li>
       </ul>
       <h3>特性（組み合わせバフ）</h3>
       <ul class="helplist">

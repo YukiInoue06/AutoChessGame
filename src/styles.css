@@ -43,6 +43,12 @@ html, body {
   inset: 0;
   pointer-events: none;
   display: grid;
+  /*
+   * minmax(0, 1fr) にしないと、列の幅が中身（トップバー）の最小幅まで広がってしまう。
+   * すると width:100% のアクションバーが画面より広くなり、
+   * バトル開始ボタンが右へはみ出して見える。
+   */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   padding: 14px clamp(12px, 3vw, 28px);
   gap: 10px;
@@ -113,34 +119,6 @@ html, body {
 }
 .xpbar__fill[data-max="true"] { background: var(--gold); }
 
-.phase {
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 8px 20px;
-  backdrop-filter: blur(10px);
-  box-shadow: var(--shadow);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.phase__text { white-space: nowrap; }
-.phase__dot {
-  width: 9px;
-  flex: none;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ally);
-  box-shadow: 0 0 12px var(--ally);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-.phase[data-phase="battle"] .phase__dot { background: var(--enemy); box-shadow: 0 0 12px var(--enemy); }
-.phase[data-phase="result"] .phase__dot { background: var(--gold); box-shadow: 0 0 12px var(--gold); animation: none; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-
 /* ---------- ボタン ---------- */
 .btn {
   font-family: inherit;
@@ -187,6 +165,8 @@ html, body {
   grid-row: 3;
   justify-self: center;
   align-self: end;
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 18px;
@@ -326,6 +306,9 @@ html, body {
 /* ---------- オープニング（開幕定跡） ---------- */
 .openingtag {
   align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin-left: 4px;
   padding: 3px 9px;
   border-left: 1px solid var(--line);
@@ -337,6 +320,7 @@ html, body {
   cursor: help;
 }
 .openingtag[hidden] { display: none; }
+.openingtag__icon { font-size: 13px; letter-spacing: 1px; }
 .openingtag:hover { color: #e6dcff; background: rgba(167, 139, 250, 0.12); }
 .opening__effects--solo { border-top: 0; margin-top: 14px; padding-top: 0; }
 
@@ -1296,7 +1280,8 @@ kbd {
     gap: 10px;
     padding: 12px;
   }
-  .actionbar__hint { text-align: center; max-width: none; font-size: 12px; }
+  /* 一行に収めようとして幅を押し広げないよう、折り返させる */
+  .actionbar__hint { text-align: center; max-width: 100%; font-size: 12px; }
   .toast { bottom: 150px; white-space: normal; max-width: 80vw; text-align: center; }
   .actionbar .btn--primary { width: 100%; }
   .stat { min-width: 50px; }
@@ -1354,13 +1339,9 @@ kbd {
   .topbar { flex-wrap: wrap; gap: 8px; }
   .topbar__slot { padding: 6px 10px; flex: 1 1 auto; justify-content: center; }
   .topbar__slot--right { flex: 0 0 auto; }
-  .phase {
-    order: 3;
-    width: 100%;
-    justify-content: center;
-    padding: 6px 14px;
-    font-size: 13px;
-  }
+  /* 定跡名まで出すと行があふれるので、スマホでは絵柄だけにする（タップで詳細） */
+  .openingtag__name { display: none; }
+  .openingtag { padding: 3px 6px; }
   .stat { min-width: 40px; }
   .stat + .stat { padding-left: 10px; }
   .stat__value { font-size: 16px; }
