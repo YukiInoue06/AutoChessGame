@@ -137,9 +137,20 @@ export class Game {
   constructor() {
     this.reset();
     this.best = Number(storage.get("autochess.best", 0));
+    /** ランをまたいで貯まる。ホーム画面に出る */
+    this.points = Number(storage.get("autochess.points", 0));
+  }
+
+  /** ランの成果ぶんを足して保存する */
+  addPoints(amount) {
+    this.points = Math.max(0, Math.round(this.points + amount));
+    storage.set("autochess.points", String(this.points));
+    return this.points;
   }
 
   reset() {
+    /** このランで自己ベストを更新したか（ポイントのボーナス判定用） */
+    this.newBest = false;
     this.round = 1;
     this.streak = 0;
     this.xp = 0;
@@ -683,6 +694,7 @@ export class Game {
       this.round += 1;
       if (this.round - 1 > this.best) {
         this.best = this.round - 1;
+        this.newBest = true;
         storage.set("autochess.best", String(this.best));
       }
       return "win";

@@ -626,35 +626,71 @@ export class Hud {
     this.el.overlayPanel.replaceChildren();
   }
 
-  /** タイトル画面 */
-  showTitle(best) {
+  /**
+   * ホーム画面。ここから始めて、力尽きたらここへ戻ってくる。
+   *
+   * @param {{best:number, points:number, gained?:number|null}} state
+   *   gained … 直前のランで得たポイント（戻ってきた直後だけ出す）
+   * @returns {Promise<void>} プレイを押したら解決する
+   */
+  showHome({ best = 0, points = 0, gained = null } = {}) {
     return new Promise((resolve) => {
-      const p = this._openOverlay(`
-        <h1 class="title">AUTO CHESS ARENA</h1>
-        <p class="subtitle">チェス盤オートバトル ・ 全26種</p>
-        <p>
-          ショップでユニットを雇い、盤に並べて、あとは見守るだけ。
-          コマは<b>それぞれの動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
-        </p>
-        <h3>ルール</h3>
-        <ol class="helplist">
-          <li><b>ショップ</b> — 5枠の品揃えから雇う。リロールで引き直せる</li>
-          <li><b>レベル</b> — 盤に出せる人数＝レベル。経験値で上がり、上位レアリティも出やすくなる</li>
-          <li><b>合成</b> — 同じユニットが3体そろうと自動で★アップ</li>
-          <li><b>特性</b> — 盤の顔ぶれでバフが発動。左のパネルの特性名を押すと効果が出る</li>
-          <li><b>定跡</b> — 開幕と R6/R12/R18 で1つ選ぶ。ラン全体に効き、積み重なる</li>
-          <li><b>準備</b> — 手前3列にドラッグで配置。控え列に置いた分は戦わない</li>
-          <li><b>バトル</b> — 自動で戦闘。全滅させれば勝ち。負けるとライフが1減る</li>
-        </ol>
-        <div class="overlay__actions">
-          <span class="overlay__note">${best > 0 ? `自己ベスト: ラウンド ${best} 突破` : "初挑戦"}</span>
-          <button class="btn btn--primary" data-act="start">ゲームスタート</button>
-        </div>
-      `);
-      this._on(p.querySelector('[data-act="start"]'), "click", () => {
-        this.closeOverlay();
-        resolve();
-      });
+      // 初挑戦のときだけ、ここにルールの要点も出す
+      const firstTime = best === 0 && points === 0;
+
+      const render = () => {
+        const p = this._openOverlay(`
+          <h1 class="title">AUTO CHESS ARENA</h1>
+          <p class="subtitle">チェス盤オートバトル ・ 全26種</p>
+
+          <div class="home__stats">
+            <div class="home__stat home__stat--points">
+              <span class="home__statLabel">ポイント</span>
+              <span class="home__statValue">${points.toLocaleString("ja-JP")}</span>
+              ${gained ? `<span class="home__statGain">+${gained.toLocaleString("ja-JP")}</span>` : ""}
+            </div>
+            <div class="home__stat">
+              <span class="home__statLabel">自己ベスト</span>
+              <span class="home__statValue">${best > 0 ? `R${best}` : "—"}</span>
+              <span class="home__statSub">${best > 0 ? "突破ラウンド" : "まだ挑戦していません"}</span>
+            </div>
+          </div>
+
+          <p class="home__lead">
+            ショップでユニットを雇い、盤に並べて、あとは見守るだけ。
+            コマは<b>それぞれの動き方</b>で敵に迫り、マナが満ちるとスキルを放ちます。
+            力尽きるまでのラウンド数と編成の厚さが<b>ポイント</b>になります。
+          </p>
+          ${
+            firstTime
+              ? `<h3>ルール</h3>
+                 <ol class="helplist">
+                   <li><b>ショップ</b> — 5枠の品揃えから雇う。リロールで引き直せる</li>
+                   <li><b>レベル</b> — 盤に出せる人数＝レベル。上位レアリティも出やすくなる</li>
+                   <li><b>合成</b> — 同じユニットが3体そろうと自動で★アップ</li>
+                   <li><b>特性</b> — 盤の顔ぶれでバフが発動。特性名を押すと効果が出る</li>
+                   <li><b>定跡</b> — 開幕と R6/R12/R18 で1つ選ぶ。ラン全体に効き、積み重なる</li>
+                   <li><b>バトル</b> — 自動で戦闘。負けるとライフが1減り、0でゲームオーバー</li>
+                 </ol>`
+              : ""
+          }
+
+          <div class="overlay__actions overlay__actions--home">
+            <button class="btn" data-act="help">遊びかた</button>
+            <button class="btn btn--primary btn--play" data-act="play">▶ プレイ</button>
+          </div>
+        `);
+        this._on(p.querySelector('[data-act="play"]'), "click", () => {
+          this.closeOverlay();
+          resolve();
+        });
+        // 遊びかたは同じオーバーレイを使うので、閉じたらホームを描き直す
+        this._on(p.querySelector('[data-act="help"]'), "click", () =>
+          this.showHelp({ onClose: render }),
+        );
+      };
+
+      render();
     });
   }
 
@@ -855,7 +891,8 @@ export class Hud {
   }
 
   /** 遊びかた（いつでも閉じられる） */
-  showHelp() {
+  /** @param {{onClose?: () => void}} opts 閉じたあとに別の画面へ戻したいとき用 */
+  showHelp({ onClose = null } = {}) {
     const p = this._openOverlay(`
       <h2>遊びかた</h2>
       <h3>操作</h3>
@@ -907,11 +944,21 @@ export class Hud {
         <li>チェスのコマは本家どおりの動き方、RPGジョブは役割に合わせた動き方をします</li>
         <li>40秒経過で<b>サドンデス</b>。全員がじわじわ削られます</li>
       </ul>
+      <h3>ポイント</h3>
+      <ul class="helplist">
+        <li>ライフが尽きるとホーム画面に戻り、そのランの成果が<b>ポイント</b>になって貯まります</li>
+        <li>内訳は<b>突破ラウンド×12</b>と<b>編成の価値×3</b>（＋自己ベスト更新で50）</li>
+        <li>編成の価値はユニットの<b>コスト×3^(★-1)</b>の合計。控えのユニットも数に入ります</li>
+        <li>ポイントと自己ベストはブラウザに保存されます（使いみちは今後追加予定）</li>
+      </ul>
       <div class="overlay__actions">
         <button class="btn btn--primary" data-act="close">閉じる</button>
       </div>
     `);
-    this._on(p.querySelector('[data-act="close"]'), "click", () => this.closeOverlay());
+    this._on(p.querySelector('[data-act="close"]'), "click", () => {
+      if (onClose) onClose();
+      else this.closeOverlay();
+    });
   }
 
   /**
@@ -1302,15 +1349,43 @@ export class Hud {
     });
   }
 
-  showGameOver({ round, best }) {
+  /**
+   * ゲームオーバー。獲得ポイントの内訳を出してからホームへ返す。
+   *
+   * @param {{round:number, best:number, earned?:object|null, points?:number}} p
+   *   earned … points.js の scoreRun の戻り値
+   *   points … 加算後の総ポイント
+   */
+  showGameOver({ round, best, earned = null, points = 0 }) {
     return new Promise((resolve) => {
       const p = this._openOverlay(`
         <div class="result-tag result-tag--lose">GAME OVER</div>
         <h2>ラウンド ${round} で力尽きた</h2>
         <p>突破ラウンド数: <b>${round - 1}</b> ／ 自己ベスト: <b style="color:#f5c451">${best}</b></p>
+        ${
+          earned
+            ? `<div class="earn">
+                 <div class="earn__head">
+                   <span class="earn__label">獲得ポイント</span>
+                   <span class="earn__total">+${earned.total.toLocaleString("ja-JP")}</span>
+                 </div>
+                 <ul class="earn__rows">
+                   ${earned.rows
+                     .map(
+                       (r) =>
+                         `<li><span>${r.label}</span><b>+${r.value.toLocaleString("ja-JP")}</b></li>`,
+                     )
+                     .join("")}
+                 </ul>
+                 <div class="earn__foot">
+                   通算 <b>${points.toLocaleString("ja-JP")}</b> ポイント
+                 </div>
+               </div>`
+            : ""
+        }
         <p>編成と配置を変えれば結果は変わる。もう一度挑もう。</p>
         <div class="overlay__actions">
-          <button class="btn btn--gold" data-act="retry">最初から挑戦する</button>
+          <button class="btn btn--gold" data-act="retry">ホームへ戻る</button>
         </div>
       `);
       this._on(p.querySelector('[data-act="retry"]'), "click", () => {

@@ -14,6 +14,8 @@ import { PlacementController, isDeployTile } from "./input/placement.js";
 import { isBenchTile } from "./core/board.js";
 import { activeTraits } from "./core/traits.js";
 
+import { scoreRun } from "./core/points.js";
+
 import { Hud } from "./ui/hud.js";
 
 const SPEEDS = [1, 1.5, 2, 3];
@@ -44,6 +46,8 @@ let elapsed = 0;
 let selectedUid = null;
 let inspectorTimer = 0;
 let busy = false; // オーバーレイ表示中などの入力ロック
+/** ランが終わった（ゲームオーバー）ことをホームのループへ伝える */
+let endRun = null;
 
 // ------------------------------------------------------------------ UI 初期化
 
@@ -587,11 +591,22 @@ async function onBattleEnd(winner) {
   hud.setStats(game);
 
   if (outcome === "gameover") {
-    await hud.showGameOver({ round: game.round, best: game.best });
+    // ラウンド数と最後の編成をポイントに換算して、ホームへ持ち帰る
+    const earned = scoreRun({
+      round: game.round,
+      roster: game.roster,
+      newBest: game.newBest,
+    });
+    const points = game.addPoints(earned.total);
+    await hud.showGameOver({ round: game.round, best: game.best, earned, points });
+
     game.reset();
     hud.setStats(game);
+    hud.setOpenings([]);
+    hud.setTraits([]);
+    hud.setActionBar({ visible: false });
     busy = false;
-    await startNewRun();
+    endRun?.({ gained: earned.total });
     return;
   }
 
@@ -686,18 +701,33 @@ async function boot() {
   hud.setSpeedLabel(SPEEDS[speedIndex]);
   hud.setActionBar({ visible: false });
 
-  // タイトル画面の裏でデモ用のコマを並べておく
-  showTitleDiorama();
-
   requestAnimationFrame(frame);
 
-  await hud.showTitle(game.best);
-  clearBoard();
-  await startNewRun();
+  // ホーム → ラン → ゲームオーバー → ホーム、をずっと繰り返す
+  let gained = null;
+  for (;;) {
+    // ホームの裏でデモ用のコマを並べておく（前のランの盤は片付ける）
+    clearBoard();
+    showHomeDiorama();
+    await hud.showHome({ best: game.best, points: game.points, gained });
+    clearBoard();
+    gained = (await runOnce()).gained;
+  }
 }
 
-/** タイトル背景に飾るコマたち */
-function showTitleDiorama() {
+/** 1ラン走らせる。ゲームオーバーになったら解決する */
+function runOnce() {
+  return new Promise((resolve) => {
+    endRun = (result) => {
+      endRun = null;
+      resolve(result ?? { gained: 0 });
+    };
+    startNewRun();
+  });
+}
+
+/** ホーム画面の背景に飾るコマたち */
+function showHomeDiorama() {
   const demo = [
     { typeId: "rook", team: "player", tile: { c: 2, r: 2 } },
     { typeId: "knight", team: "player", tile: { c: 3, r: 2 } },

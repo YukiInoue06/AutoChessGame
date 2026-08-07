@@ -1099,6 +1099,104 @@ html, body {
 .result-tag--win { color: var(--ok); }
 .result-tag--lose { color: var(--enemy); }
 
+/* ---------- ホーム画面 ---------- */
+.home__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.home__stat {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.home__statLabel {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+.home__statValue {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.home__statSub { font-size: 11px; color: var(--muted); }
+/* ポイントは金色。ランで得たぶんは右上に添える */
+.home__stat--points {
+  border-color: rgba(245, 196, 81, 0.4);
+  background: rgba(245, 196, 81, 0.08);
+}
+.home__stat--points .home__statValue { color: var(--gold); }
+.home__statGain {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ok);
+  animation: gainIn 0.5s ease both;
+}
+@keyframes gainIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.home__lead { margin-top: 18px; }
+.overlay__actions--home { justify-content: flex-end; }
+.btn--play { padding: 14px 46px; font-size: 17px; }
+
+/* ---------- 獲得ポイント（ゲームオーバー） ---------- */
+.earn {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: rgba(245, 196, 81, 0.08);
+  border: 1px solid rgba(245, 196, 81, 0.32);
+  border-radius: 14px;
+}
+.earn__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.earn__label { font-size: 11px; letter-spacing: 0.16em; color: var(--muted); }
+.earn__total {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.earn__rows {
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.earn__rows li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: #c3cee4;
+}
+.earn__rows b { font-variant-numeric: tabular-nums; }
+.earn__foot {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: right;
+}
+.earn__foot b { color: var(--gold); font-size: 16px; font-variant-numeric: tabular-nums; }
+
 /* ユニット選択カード */
 .roster {
   display: grid;
