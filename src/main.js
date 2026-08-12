@@ -15,6 +15,7 @@ import { isBenchTile } from "./core/board.js";
 import { activeTraits } from "./core/traits.js";
 
 import { scoreRun } from "./core/points.js";
+import { Sound } from "./audio/sound.js";
 
 import { Hud } from "./ui/hud.js";
 
@@ -51,6 +52,8 @@ let endRun = null;
 
 // ------------------------------------------------------------------ UI 初期化
 
+const sound = new Sound();
+
 const hud = new Hud({
   onStart: () => beginBattle(),
   onSpeedToggle: () => cycleSpeed(),
@@ -58,6 +61,7 @@ const hud = new Hud({
   onShop: () => openShop(),
   onEnemyInfo: () => hud.showEnemyInfo(wave),
   onBenchToggle: () => toggleBench(),
+  sound,
 });
 
 /** 兵舎を開く。買った/売ったぶんは即座に盤へ反映する */
@@ -99,8 +103,10 @@ function toggleBench() {
   const res = entry.onBoard ? game.unfield(entry) : game.field(entry);
   if (!res.ok) {
     hud.toast(res.reason);
+    sound.sfx("error");
     return;
   }
+  sound.sfx("place");
   view.unit.tile = { ...entry.tile };
   view.snapTo(entry.tile);
   view.setBenched(!entry.onBoard);
@@ -248,6 +254,7 @@ async function enterPrep() {
 
   wave = game.buildEnemyWave();
   setupPrep();
+  sound.music("calm");
   hud.setPhase(phase);
   hud.clearLog();
   // ログは clearLog のあとに出す（先に出すと消えてしまう）
@@ -323,6 +330,7 @@ function placeUnit(view, tile) {
   view.unit.tile = { c: tile.c, r: tile.r };
   view.snapTo(tile);
   view.setBenched(!entry.onBoard);
+  sound.sfx("place");
   refreshPrepUI();
 }
 
@@ -364,6 +372,8 @@ function beginBattle() {
   game.phase = Phase.BATTLE;
   placement.setActive(false);
   stage.clearHighlights();
+  sound.sfx("battleStart");
+  sound.music("battle");
   hud.setPhase(phase);
   hud.setActionBar({ visible: false });
   hud.log(`<em>ラウンド ${game.round}</em> — 対 <b class="enemy">${wave.name}</b>`);
@@ -579,6 +589,8 @@ async function onBattleEnd(winner) {
   hud.setPhase(phase);
 
   const win = winner === "player";
+  sound.music(null);
+  sound.sfx(win ? "win" : "lose");
   hud.announce(win ? "VICTORY" : "DEFEAT", win ? "good" : "danger");
   hud.log(win ? "<em>勝利!</em>" : "<em>敗北…</em>");
 
@@ -598,6 +610,7 @@ async function onBattleEnd(winner) {
       newBest: game.newBest,
     });
     const points = game.addPoints(earned.total);
+    sound.sfx("gameover");
     await hud.showGameOver({ round: game.round, best: game.best, earned, points });
 
     game.reset();
@@ -709,6 +722,7 @@ async function boot() {
     // ホームの裏でデモ用のコマを並べておく（前のランの盤は片付ける）
     clearBoard();
     showHomeDiorama();
+    sound.music("calm");
     await hud.showHome({ best: game.best, points: game.points, gained });
     clearBoard();
     gained = (await runOnce()).gained;
@@ -753,6 +767,7 @@ boot();
 // デバッグ用に覗けるようにしておく
 Object.assign(window, {
   __game: game,
+  __sound: sound,
   __stage: stage,
   __THREE: THREE,
   __units: UNIT_TYPES,

@@ -34,7 +34,10 @@ export class Hud {
     onShop,
     onEnemyInfo = () => {},
     onBenchToggle = () => {},
+    sound = null,
   }) {
+    /** @type {import("../audio/sound.js").Sound|null} */
+    this.sound = sound;
     this.el = {
       round: $("statRound"),
       life: $("statLife"),
@@ -50,6 +53,7 @@ export class Hud {
       actionHint: $("actionHint"),
       btnStart: $("btnStart"),
       btnSpeed: $("btnSpeed"),
+      btnSound: $("btnSound"),
       btnHelp: $("btnHelp"),
       logPanel: $("logPanel"),
       logList: $("logList"),
@@ -73,6 +77,7 @@ export class Hud {
     this.el.btnHelp.addEventListener("click", () => onHelp());
     this.el.btnShop.addEventListener("click", () => onShop());
     this.el.btnBench.addEventListener("click", () => onBenchToggle());
+    this._setupSound();
     // ヒントは毎回 innerHTML で描き直すので、委譲で拾う
     this.el.actionHint.addEventListener("click", (e) => {
       if (e.target.closest('[data-act="enemyInfo"]')) onEnemyInfo();
@@ -492,6 +497,60 @@ export class Hud {
     el.textContent = picked.onBoard ? `${picked.name} を控えへ` : `${picked.name} を出す`;
   }
 
+  /**
+   * 音の配線。
+   *   - 最初のタップで AudioContext を作る（自動再生規制のため）
+   *   - 押せるものはすべて委譲でタップ音を鳴らす（data-sfx で音を変えられる）
+   *   - 🔊 ボタンで BGM+SE → SEのみ → 消音 と切り替える
+   */
+  _setupSound() {
+    const btn = this.el.btnSound;
+    if (!this.sound) {
+      if (btn) btn.hidden = true;
+      return;
+    }
+
+    window.addEventListener("pointerdown", () => this.sound.unlock(), { capture: true });
+    this.sound.bindVisibility();
+
+    // 押せるものならタップ音。data-sfx="off" を付けたものだけ黙らせる
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        const el = e.target.closest(
+          "button, .card, .opening__head, .traitchip, .trait, .shop__levelHead",
+        );
+        if (!el || el.disabled || el.dataset.sfx === "off") return;
+        this.sound.sfx(el.dataset.sfx || "tap");
+      },
+      { capture: true },
+    );
+
+    const LABEL = {
+      all: { icon: "🔊", title: "音: BGM + 効果音" },
+      se: { icon: "🔈", title: "音: 効果音のみ" },
+      off: { icon: "🔇", title: "音: 消音" },
+    };
+    const paint = () => {
+      const l = LABEL[this.sound.mode] ?? LABEL.all;
+      btn.textContent = l.icon;
+      btn.title = `${l.title}（押すと切替）`;
+    };
+    btn.dataset.sfx = "off"; // 切替後の状態が分かるよう、押した音は下で鳴らす
+    btn.addEventListener("click", () => {
+      this.sound.unlock();
+      this.sound.cycleMode();
+      paint();
+      this.sound.sfx("tap");
+    });
+    paint();
+  }
+
+  /** 効果音。音が無効なら何も起きない */
+  se(name) {
+    this.sound?.sfx(name);
+  }
+
   /** 短いメッセージを一瞬だけ出す（コスト上限に引っかかった時など） */
   toast(text) {
     const el = this.el.toast;
@@ -820,6 +879,7 @@ export class Hud {
 
       this._on(takeBtn, "click", () => {
         if (!chosen) return;
+        this.se("select");
         this.closeOverlay();
         resolve(chosen);
       });
@@ -828,8 +888,10 @@ export class Hud {
         const res = onReroll?.();
         if (!res?.ok) {
           this.toast(res?.reason ?? "引き直せません");
+          this.se("error");
           return;
         }
+        this.se("reroll");
         left = res.left;
         render(res.choices);
       });
@@ -905,6 +967,7 @@ export class Hud {
         <li><b>「次の相手は ◯◯」</b> — 押すと相手の編成と、相手側で発動している特性が出ます</li>
         <li><b>ホイール / 2本指ピンチ</b> — ズーム（盤の向きは固定です）</li>
         <li><kbd>Space</kbd> — バトル開始 / 速度切替</li>
+        <li><b>🔊</b> — 押すたびに BGM+効果音 → 効果音のみ → 消音 と切り替わります</li>
       </ul>
       <h3>ショップとレベル</h3>
       <ul class="helplist">
@@ -1114,14 +1177,17 @@ export class Hud {
           this.toast(
             res.merged ? `${name} が ★${res.merged} に合体!` : `${name} を雇った`,
           );
+          this.se(res.merged ? "merge" : "buy");
         } else {
           this.toast(res.reason);
+          this.se("error");
         }
         render();
       };
 
       const sell = (entry) => {
         this.toast(`${UNIT_TYPES[entry.typeId].name} を ${game.refundOf(entry)}G で売却`);
+        this.se("sell");
         game.sell(entry);
         render();
       };
@@ -1207,14 +1273,24 @@ export class Hud {
 
       this._on(p.querySelector('[data-act="reroll"]'), "click", () => {
         const res = game.reroll();
-        if (!res.ok) this.toast(res.reason);
+        if (!res.ok) {
+          this.toast(res.reason);
+          this.se("error");
+        } else {
+          this.se("reroll");
+        }
         render();
       });
 
       this._on(p.querySelector('[data-act="xp"]'), "click", () => {
         const res = game.buyXp();
-        if (!res.ok) this.toast(res.reason);
-        else if (res.levelUps) this.toast(`レベル ${game.level} に上がった!`);
+        if (!res.ok) {
+          this.toast(res.reason);
+          this.se("error");
+        } else if (res.levelUps) {
+          this.toast(`レベル ${game.level} に上がった!`);
+          this.se("levelup");
+        }
         render();
       });
 
@@ -1388,6 +1464,9 @@ export class Hud {
           <button class="btn btn--gold" data-act="retry">ホームへ戻る</button>
         </div>
       `);
+      // 内訳が出たところでポイントの音を重ねる
+      if (earned?.total) setTimeout(() => this.se("point"), 260);
+
       this._on(p.querySelector('[data-act="retry"]'), "click", () => {
         this.closeOverlay();
         resolve();
